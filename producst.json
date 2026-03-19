@@ -1,0 +1,424 @@
+[
+{
+"id": "0",
+"name": "Products",
+"data": [
+{
+"product id": 16066,
+"product name": "Panthenol Spray, 46,3 mg/g Schaum zur Anwendung auf der Haut",
+"pzn": "04020784",
+"price rec": 16.95,
+"package size": "130 g",
+"descriptions": "Schaumspray zur Anwendung auf der Haut. Fördert die Regeneration gereizter oder geschädigter Haut und spendet Feuchtigkeit."
+},
+{
+"product id": 976308,
+"product name": "NORSAN Omega-3 Total",
+"pzn": "13476520",
+"price rec": 27,
+"package size": "200 ml",
+"descriptions": "Flüssiges Omega-3-Öl aus Fisch. Unterstützt Herz, Gehirn und Gelenke."
+},
+{
+"product id": 977179,
+"product name": "NORSAN Omega-3 Vegan",
+"pzn": "13476394",
+"price rec": 29,
+"package size": "100 ml",
+"descriptions": "Pflanzliches Omega-3 aus Algen. Geeignet für Vegetarier und Veganer."
+},
+{
+"product id": 993687,
+"product name": "NORSAN Omega-3 Kapseln",
+"pzn": "13512730",
+"price rec": 29,
+"package size": "120 st",
+"descriptions": "Omega-3-Kapseln zur täglichen Nahrungsergänzung."
+},
+{
+"product id": 1225428,
+"product name": "Vividrin® iso EDO® antiallergische Augentropfen",
+"pzn": "16507327",
+"price rec": 8.28,
+"package size": "30x0.5 ml",
+"descriptions": "Konservierungsmittelfreie Augentropfen zur Linderung allergischer Beschwerden wie Juckreiz und Rötung."
+},
+{
+"product id": 202796,
+"product name": "Aqualibra 80 mg/90 mg/180 mg Filmtabletten",
+"pzn": "00795287",
+"price rec": 27.82,
+"package size": "60 st",
+"descriptions": "Pflanzliches Arzneimittel zur Unterstützung der Blasenfunktion."
+},
+{
+"product id": 1103035,
+"product name": "Vitasprint Pro Energie",
+"pzn": "14050243",
+"price rec": 15.95,
+"package size": "8 st",
+"descriptions": "Nahrungsergänzungsmittel mit B-Vitaminen und Aminosäuren zur Verringerung von Müdigkeit."
+},
+{
+"product id": 27955,
+"product name": "Cystinol akut®",
+"pzn": "07114824",
+"price rec": 26.5,
+"package size": "60 st",
+"descriptions": "Pflanzliches Arzneimittel zur Behandlung akuter Harnwegsinfektionen."
+},
+{
+"product id": 30955,
+"product name": "Cromo-ratiopharm® Augentropfen Einzeldosis",
+"pzn": "04884527",
+"price rec": 7.59,
+"package size": "20x0.5 ml",
+"descriptions": "Antiallergische Augentropfen zur Vorbeugung und Behandlung von allergischen Augenbeschwerden."
+},
+{
+"product id": 1162261,
+"product name": "Kijimea Reizdarm PRO",
+"pzn": "15999676",
+"price rec": 38.99,
+"package size": "28 st",
+"descriptions": "Medizinisches Produkt zur Linderung von Symptomen des Reizdarmsyndroms wie Blähungen und Bauchschmerzen."
+},
+{
+"product id": 1204782,
+"product name": "Mucosolvan 1 mal täglich Retardkapseln",
+"pzn": "15210915",
+"price rec": 39.97,
+"package size": "50 st",
+"descriptions": "Langwirksames Arzneimittel zur Schleimlösung bei Husten."
+},
+{
+"product id": 1210016,
+"product name": "OMNi-BiOTiC SR-9 mit B-Vitaminen",
+"pzn": "16487346",
+"price rec": 44.5,
+"package size": "28x3 g",
+"descriptions": "Probiotikum mit B-Vitaminen zur Unterstützung der Darmflora und des Energiestoffwechsels."
+},
+{
+"product id": 1245942,
+"product name": "Osa Schorf Spray",
+"pzn": "16781761",
+"price rec": 15.45,
+"package size": "30 ml",
+"descriptions": "Pflegespray zur sanften Entfernung von Milchschorf und trockener Kopfhaut bei Babys."
+},
+{
+"product id": 1247528,
+"product name": "Multivitamin Fruchtgummibärchen vegan u zuckerfrei",
+"pzn": "16908486",
+"price rec": 12.74,
+"package size": "60 st",
+"descriptions": "Vegane, zuckerfreie Multivitamin-Gummibärchen zur täglichen Versorgung mit Vitaminen."
+},
+{
+"product id": 1273105,
+"product name": "Iberogast® Classic, Flüssigkeit zum Einnehmen",
+"pzn": "16507540",
+"price rec": 28.98,
+"package size": "50 ml",
+"descriptions": "Pflanzliches Arzneimittel bei Magen-Darm-Beschwerden."
+},
+{
+"product id": 1358905,
+"product name": "COLPOFIX®",
+"pzn": "18389398",
+"price rec": 49.6,
+"package size": "40 ml",
+"descriptions": "Vaginalgel zur Unterstützung der Gesundheit der Zervixschleimhaut."
+},
+{
+"product id": 1293377,
+"product name": "Augentropfen RedCare",
+"pzn": "17396686",
+"price rec": 12.69,
+"package size": "10 ml",
+"descriptions": "Befeuchtende Augentropfen bei trockenen oder gereizten Augen."
+},
+{
+"product id": 1313639,
+"product name": "MULTILAC Darmsynbiotikum",
+"pzn": "17931783",
+"price rec": 9.99,
+"package size": "10 st",
+"descriptions": "Kombination aus Pro- und Präbiotika zur Unterstützung der Verdauung."
+},
+{
+"product id": 1319766,
+"product name": "SAW PALMETO (SÄGEPALME) 350 mg",
+"pzn": "18216723",
+"price rec": 8.47,
+"package size": "100 st",
+"descriptions": "Pflanzliches Nahrungsergänzungsmittel zur Unterstützung der Prostatafunktion."
+},
+{
+"product id": 1329121,
+"product name": "Paracetamol apodiscounter 500 mg Tabletten",
+"pzn": "18188323",
+"price rec": 2.06,
+"package size": "20 st",
+"descriptions": "Schmerz- und fiebersenkendes Arzneimittel."
+},
+{
+"product id": 1352774,
+"product name": "Prostata Men Kapseln",
+"pzn": "18657640",
+"price rec": 19.99,
+"package size": "60 st",
+"descriptions": "Nahrungsergänzungsmittel zur Unterstützung der Prostatagesundheit."
+},
+{
+"product id": 1357649,
+"product name": "Natural Intimate Creme",
+"pzn": "18769758",
+"price rec": 18.9,
+"package size": "50 ml",
+"descriptions": "Pflegecreme zur Befeuchtung und zum Schutz des sensiblen Intimbereichs."
+},
+{
+"product id": 1358513,
+"product name": "proBIO 6 Probiotik Kapseln APOMIA",
+"pzn": "18317737",
+"price rec": 34.9,
+"package size": "30 st",
+"descriptions": "Probiotische Kapseln zur Unterstützung einer gesunden Darmflora."
+},
+{
+"product id": 1363580,
+"product name": "Eucerin DERMOPURE Triple Effect Reinigungsgel",
+"pzn": "18222095",
+"price rec": 17.25,
+"package size": "150 ml",
+"descriptions": "Reinigungsgel für unreine Haut, reduziert Unreinheiten und Pickelmale."
+},
+{
+"product id": 1381140,
+"product name": "frida baby FlakeFixer",
+"pzn": "19140755",
+"price rec": 0,
+"package size": "1 st",
+"descriptions": "Sanfte Pflege zur Entfernung von Milchschorf bei Babys."
+},
+{
+"product id": 1383626,
+"product name": "Vitasprint Duo Energie",
+"pzn": "18760556",
+"price rec": 16.95,
+"package size": "20 st",
+"descriptions": "Nahrungsergänzungsmittel mit Vitaminen und Mineralstoffen zur Steigerung der Energie."
+},
+{
+"product id": 11334,
+"product name": "Bepanthen WUND- UND HEILSALBE, 50 mg/g Salbe",
+"pzn": "01580241",
+"price rec": 7.69,
+"package size": "20 g",
+"descriptions": "Salbe zur Unterstützung der Wundheilung und Pflege trockener Haut."
+},
+{
+"product id": 1391185,
+"product name": "V-Biotics Flora Complex",
+"pzn": "19296256",
+"price rec": 19.9,
+"package size": "19 g",
+"descriptions": "Probiotisches Nahrungsergänzungsmittel zur Unterstützung von Darm und Immunsystem."
+},
+{
+"product id": 1403860,
+"product name": "Aveeno Skin Relief Body Lotion",
+"pzn": "19342855",
+"price rec": 14.99,
+"package size": "300 ml",
+"descriptions": "Beruhigende Körperlotion für sehr trockene und juckende Haut."
+},
+{
+"product id": 1434198,
+"product name": "Centrum Vital+ Mentale Leistung",
+"pzn": "19486198",
+"price rec": 19.95,
+"package size": "30 st",
+"descriptions": "Multivitaminpräparat zur Unterstützung der geistigen Leistungsfähigkeit."
+},
+{
+"product id": 1434864,
+"product name": "Redcare Wundschutzcreme",
+"pzn": "19280947",
+"price rec": 14.39,
+"package size": "100 ml",
+"descriptions": "Schutzcreme für gereizte und empfindliche Haut."
+},
+{
+"product id": 1435154,
+"product name": "Cetaphil Sanft glättende SA Reinigung",
+"pzn": "19720688",
+"price rec": 13.95,
+"package size": "236 ml",
+"descriptions": "Sanfte Reinigung mit Salicylsäure für raue und unebene Haut."
+},
+{
+"product id": 14176,
+"product name": "Magnesium Verla® N Dragées, magensaftresistente Tabletten",
+"pzn": "03554928",
+"price rec": 6.4,
+"package size": "50 st",
+"descriptions": "Magnesiumpräparat zur Unterstützung von Muskeln und Nerven."
+},
+{
+"product id": 704523,
+"product name": "Livocab® direkt Augentropfen, 0,05 % Augentropfen, Suspension",
+"pzn": "00676714",
+"price rec": 14.99,
+"package size": "4 ml",
+"descriptions": "Schnell wirksame Augentropfen bei allergischen Augenbeschwerden."
+},
+{
+"product id": 185422,
+"product name": "Cetirizin HEXAL® Tropfen bei Allergien, 10 mg/ml Tropfen zum Einnehmen, Lösung",
+"pzn": "02579607",
+"price rec": 13.19,
+"package size": "10 ml",
+"descriptions": "Antihistaminikum zur Linderung von Allergiesymptomen."
+},
+{
+"product id": 198010,
+"product name": "Loperamid akut - 1 A Pharma®, 2 mg Hartkapseln",
+"pzn": "01338066",
+"price rec": 3.93,
+"package size": "10 st",
+"descriptions": "Arzneimittel zur Behandlung von akutem Durchfall."
+},
+{
+"product id": 202006,
+"product name": "Ramipril - 1 A Pharma® 10 mg Tabletten",
+"pzn": "00766794",
+"price rec": 12.59,
+"package size": "20 st",
+"descriptions": "Verschreibungspflichtiges Arzneimittel zur Behandlung von Bluthochdruck."
+},
+{
+"product id": 306595,
+"product name": "GRANU FINK® femina, Hartkapseln",
+"pzn": "01499852",
+"price rec": 20.29,
+"package size": "30 st",
+"descriptions": "Pflanzliches Arzneimittel zur Unterstützung der Blasengesundheit bei Frauen."
+},
+{
+"product id": 324024,
+"product name": "Vitasprint B12 Kapseln",
+"pzn": "04909523",
+"price rec": 17.04,
+"package size": "20 st",
+"descriptions": "Vitamin-B12-Präparat zur Unterstützung von Energie und Nervenfunktion."
+},
+{
+"product id": 332568,
+"product name": "Sinupret® Saft",
+"pzn": "00605588",
+"price rec": 13.3,
+"package size": "100 ml",
+"descriptions": "Pflanzliches Arzneimittel bei Nasennebenhöhlenentzündungen."
+},
+{
+"product id": 335765,
+"product name": "Nurofen 200 mg Schmelztabletten Lemon",
+"pzn": "02547582",
+"price rec": 10.98,
+"package size": "12 st",
+"descriptions": "Ibuprofen-Schmerzmittel in schnell löslicher Form."
+},
+{
+"product id": 363715,
+"product name": "Vitamin B-Komplex-ratiopharm",
+"pzn": "04132750",
+"price rec": 24.97,
+"package size": "60 st",
+"descriptions": "Kombination verschiedener B-Vitamine zur Unterstützung des Nervensystems."
+},
+{
+"product id": 368333,
+"product name": "Calmvalera Hevert Tropfen",
+"pzn": "06560421",
+"price rec": 35.97,
+"package size": "100 ml",
+"descriptions": "Homöopathisches Arzneimittel bei nervöser Unruhe und Schlafstörungen."
+},
+{
+"product id": 1248085,
+"product name": "femiLoges® 4 mg magensaftresistente Tabletten",
+"pzn": "16815862",
+"price rec": 20.44,
+"package size": "30 st",
+"descriptions": "Hormonfreies Arzneimittel zur Linderung von Wechseljahresbeschwerden."
+},
+{
+"product id": 376212,
+"product name": "Umckaloabo® Saft für Kinder",
+"pzn": "08871266",
+"price rec": 13.15,
+"package size": "120 ml",
+"descriptions": "Pflanzlicher Saft zur Behandlung von Atemwegsinfektionen bei Kindern."
+},
+{
+"product id": 368367,
+"product name": "DulcoLax® Dragées, 5 mg magensaftresistente Tabletten",
+"pzn": "06800196",
+"price rec": 22.9,
+"package size": "100 st",
+"descriptions": "Abführmittel zur kurzfristigen Behandlung von Verstopfung."
+},
+{
+"product id": 717525,
+"product name": "Diclo-ratiopharm Schmerzgel",
+"pzn": "04704198",
+"price rec": 8.89,
+"package size": "50 g",
+"descriptions": "Schmerzgel zur äußeren Anwendung bei Muskel- und Gelenkschmerzen."
+},
+{
+"product id": 772646,
+"product name": "Minoxidil BIO-H-TIN-Pharma 20 mg/ml Spray zur Anwendung auf der Haut (Kopfhaut), Lösung",
+"pzn": "10391763",
+"price rec": 22.5,
+"package size": "60 ml",
+"descriptions": "Lösung zur Anwendung auf der Kopfhaut bei erblich bedingtem Haarausfall."
+},
+{
+"product id": 790415,
+"product name": "Hyaluron-ratiopharm® Augentropfen",
+"pzn": "10810214",
+"price rec": 13.74,
+"package size": "10 ml",
+"descriptions": "Befeuchtende Augentropfen mit Hyaluronsäure bei trockenen Augen."
+},
+{
+"product id": 790661,
+"product name": "FeniHydrocort Creme 0,25 %",
+"pzn": "10796980",
+"price rec": 8.59,
+"package size": "20 g",
+"descriptions": "Kortisonhaltige Creme zur Behandlung leichter Hautentzündungen und Juckreiz."
+},
+{
+"product id": 879236,
+"product name": "Eucerin UreaRepair PLUS Lotion 10%",
+"pzn": "11678159",
+"price rec": 27.75,
+"package size": "400 ml",
+"descriptions": "Intensiv pflegende Lotion für sehr trockene und raue Haut."
+},
+{
+"product id": 899231,
+"product name": "Vigantolvit 2000 I.E. Vitamin D3",
+"pzn": "12423869",
+"price rec": 17.99,
+"package size": "120 st",
+"descriptions": "Vitamin-D-Präparat zur Unterstützung von Knochen und Immunsystem."
+}
+]
+}
+]

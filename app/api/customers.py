@@ -1,0 +1,123 @@
+"""
+app/api/customers.py  –  /api/v1/customers
+"""
+
+from __future__ import annotations
+
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Query
+from pymongo import ASCENDING, DESCENDING
+
+from app.database.mongo_client import get_db
+from app.modules.patient_context import PatientContextService
+from app.modules.recommendation_engine import RecommendationEngine
+from app.utils.logger import get_logger
+
+router = APIRouter(prefix="/customers", tags=["Customers"])
+logger = get_logger(__name__)
+_ctx = PatientContextService()
+_eng = RecommendationEngine()
+
+
+def _paginate(
+    collection, query: dict, skip: int, limit: int, sort_field: str, sort_dir: int
+):
+    cursor = collection.find(query, {"_id": 0}).sort(sort_field, sort_dir)
+    total = collection.count_documents(query)
+    items = list(cursor.skip(skip).limit(limit))
+    return items, total
+
+
+@router.get("/", summary="List all patients")
+def list_customers(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    search: Optional[str] = Query(
+        default=None, description="Search by name or patient_id"
+    ),
+    sort_by: str = Query(default="name"),
+    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+):
+    """Paginated list of patients with optional name/ID search."""
+    db = get_db()
+    query: dict = {}
+    if search:
+        query = {
+            "$or": [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"patient_id": {"$regex": search, "$options": "i"}},
+            ]
+        }
+
+    skip = (page - 1) * page_size
+    sort_dir = ASCENDING if sort_order == "asc" else DESCENDING
+
+    items, total = _paginate(db["patients"], query, skip, page_size, sort_by, sort_dir)
+    return {
+        "status": "ok",
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": -(-total // page_size),
+        "data": items,
+    }
+
+
+@router.get("/{patient_id}", summary="Get patient profile")
+def get_customer(patient_id: str):
+    """Full patient profile including adherence and active medicines."""
+    profile = _ctx.get_patient_profile(patient_id)
+    if not profile:
+        raise HTTPException(
+            status_code=404, detail=f"Patient '{patient_id}' not found."
+        )
+    return {"status": "ok", "data": profile}
+
+
+@router.get("/{patient_id}/orders", summary="Patient order history")
+def get_customer_orders(
+    patient_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status: Optional[str] = Query(default=None),
+):
+    """Paginated order history for a patient."""
+    db = get_db()
+    query: dict = {"$or": [{"Patient ID": patient_id}, {"Patient Name": patient_id}]}
+    if status:
+        query["Order Status"] = status
+
+    skip = (page - 1) * page_size
+    total = db["consumer_orders"].count_documents(query)
+    items = list(
+        db["consumer_orders"]
+        .find(query, {"_id": 0})
+        .sort("Order Date", DESCENDING)
+        .skip(skip)
+        .limit(page_size)
+    )
+    return {
+        "status": "ok",
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "data": items,
+    }
+
+
+@router.get("/{patient_id}/risk", summary="Patient refill risk")
+def get_customer_risk(patient_id: str, medicine: str = Query(...)):
+    """Risk score for a specific medicine for this patient."""
+    try:
+        result = _ctx.generate_refill_risk_score(patient_id, medicine)
+        return {"status": "ok", "data": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/{patient_id}/recommendations", summary="Personalised recommendations")
+def get_customer_recommendations(patient_id: str):
+    """Return personalised refill + alternative recommendations."""
+    result = _eng.get_personalized_recommendations(patient_id)
+    return {"status": "ok", "data": result}

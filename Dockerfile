@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SanjeevaniRxAI – Production Dockerfile
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-stage build:
+#   Stage 1 (builder) – install Python deps into a virtual-env
+#   Stage 2 (runtime) – copy only the venv + app code → lean final image
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: dependency builder ───────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# System packages needed only during build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        g++ \
+        libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create an isolated virtual environment so Stage 2 can copy it cleanly
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies first (better layer caching)
+COPY requirements.txt .
+RUN pip install --upgrade pip wheel \
+    && pip install --no-cache-dir -r requirements.txt
+
+# ── Stage 2: lean runtime image ───────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+# Metadata labels
+LABEL maintainer="SanjeevaniRxAI Team" \
+      version="1.0.0" \
+      description="SanjeevaniRxAI Intelligent Pharmacy Backend"
+
+# Non-root user for security
+RUN groupadd --gid 1001 appgroup \
+    && useradd --uid 1001 --gid appgroup --no-create-home appuser
+
+WORKDIR /app
+
+# Pull in the pre-built virtual environment
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application source
+COPY app/          ./app/
+COPY scripts/      ./scripts/
+COPY tests/        ./tests/
+
+# Environment defaults (override via docker-compose / Kubernetes env)
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    ENV=production \
+    PORT=8000 \
+    LOG_LEVEL=INFO
+
+# Data directory for mounted Excel files
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+
+USER appuser
+
+EXPOSE 8000
+
+# Health-check (Docker daemon polls this)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" \
+    || exit 1
+
+# Production server: uvicorn with 4 workers
+CMD ["uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "4", \
+     "--log-level", "info", \
+     "--access-log"]
