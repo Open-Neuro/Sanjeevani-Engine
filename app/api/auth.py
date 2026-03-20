@@ -57,7 +57,7 @@ def get_google_flow() -> Flow:
             status_code=500,
             detail="Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
         )
-    
+
     flow = Flow.from_client_config(
         {
             "web": {
@@ -123,7 +123,7 @@ async def get_current_user(
 ) -> dict:
     """
     Dependency to extract and validate the current user from JWT token.
-    
+
     Usage in protected routes:
         @router.get("/protected")
         async def protected_route(user: dict = Depends(get_current_user)):
@@ -143,7 +143,7 @@ async def get_current_user(
 async def login(request: Request):
     """
     Redirect user to Google OAuth consent screen.
-    
+
     Returns:
         RedirectResponse to Google OAuth URL
     """
@@ -154,10 +154,10 @@ async def login(request: Request):
             include_granted_scopes="true",
             prompt="select_account",
         )
-        
+
         logger.info("OAuth login initiated", extra={"state": state})
         return RedirectResponse(url=authorization_url)
-    
+
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         raise HTTPException(
@@ -170,11 +170,11 @@ async def login(request: Request):
 async def callback(request: Request):
     """
     Handle OAuth callback from Google.
-    
+
     Query Parameters:
         code: Authorization code from Google
         state: State parameter for CSRF protection
-    
+
     Returns:
         JWT token and user information
     """
@@ -186,11 +186,11 @@ async def callback(request: Request):
                 status_code=400,
                 detail="Authorization code not provided",
             )
-        
+
         # Exchange code for tokens
         flow = get_google_flow()
         flow.fetch_token(code=code)
-        
+
         # Get user info from Google
         credentials = flow.credentials
         user_info = id_token.verify_oauth2_token(
@@ -198,7 +198,7 @@ async def callback(request: Request):
             google_requests.Request(),
             settings.GOOGLE_CLIENT_ID,
         )
-        
+
         # Extract user data
         user_data = {
             "email": user_info.get("email"),
@@ -206,11 +206,11 @@ async def callback(request: Request):
             "picture": user_info.get("picture"),
             "google_id": user_info.get("sub"),
         }
-        
+
         # Store/update user in database
         db = get_db()
         users_collection = db["users"]
-        
+
         users_collection.update_one(
             {"email": user_data["email"]},
             {
@@ -223,20 +223,20 @@ async def callback(request: Request):
             },
             upsert=True,
         )
-        
+
         # Generate JWT token
         jwt_token = create_jwt_token(user_data)
-        
+
         logger.info(
             "User authenticated successfully",
             extra={"email": user_data["email"]},
         )
-        
+
         # Redirect to the frontend with token
         # Note: We use /callback path so the frontend popup polling logic can intercept it.
         redirect_url = f"{settings.FRONTEND_URL}/callback?token={jwt_token}"
         return RedirectResponse(url=redirect_url)
-    
+
     except Exception as e:
         logger.error(f"OAuth callback error: {str(e)}")
         raise HTTPException(
@@ -249,10 +249,10 @@ async def callback(request: Request):
 async def get_me(user: dict = Depends(get_current_user)):
     """
     Get information about the currently authenticated user.
-    
+
     Requires:
         Authorization: Bearer <jwt_token>
-    
+
     Returns:
         User information from JWT token
     """
@@ -270,10 +270,10 @@ async def get_me(user: dict = Depends(get_current_user)):
 async def logout(user: dict = Depends(get_current_user)):
     """
     Logout the current user.
-    
+
     Note: Since we're using stateless JWT, this is mainly for client-side
     token removal. In production, consider implementing token blacklisting.
-    
+
     Requires:
         Authorization: Bearer <jwt_token>
     """
@@ -287,9 +287,7 @@ async def logout(user: dict = Depends(get_current_user)):
 @router.get("/health", summary="Auth service health check")
 async def auth_health():
     """Check if Google OAuth is properly configured."""
-    is_configured = bool(
-        settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET
-    )
+    is_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
     return {
         "status": "ok" if is_configured else "not_configured",
         "google_oauth": is_configured,

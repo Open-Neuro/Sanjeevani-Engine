@@ -26,6 +26,12 @@ class ProductCreate(BaseModel):
     stock: Optional[int] = 0
     generic_name: Optional[str] = None
     brand_name: Optional[str] = None
+    batch_no: Optional[str] = None
+    expiry_date: Optional[str] = None
+    mrp: Optional[float] = 0.0
+    selling_price: Optional[float] = 0.0
+    schedule: Optional[str] = "OTC"
+    prescription_required: Optional[bool] = False
 
 
 @router.post("/", summary="Add a new product")
@@ -48,6 +54,12 @@ def add_product(product: ProductCreate):
         "Current Stock": product.stock,
         "Generic Name": product.generic_name,
         "Brand Name": product.brand_name,
+        "Batch Number": product.batch_no,
+        "Expiry Date": product.expiry_date,
+        "MRP": product.mrp,
+        "Selling Price": product.selling_price,
+        "Schedule": product.schedule,
+        "Prescription Required": product.prescription_required,
         "Product ID": f"M-{db['products'].count_documents({}) + 1000}",
         "Safety Check": "Validated",
         "last_updated": datetime.utcnow(),
@@ -58,6 +70,47 @@ def add_product(product: ProductCreate):
         "status": "ok",
         "message": "Product added successfully",
         "product_id": new_doc["Product ID"],
+    }
+
+
+@router.post("/bulk", summary="Bulk add products")
+def bulk_add_products(products: list[ProductCreate]):
+    """Bulk add products to the catalog."""
+    db = get_db()
+    count = db["products"].count_documents({})
+
+    new_docs = []
+    for i, p in enumerate(products):
+        # Check for duplicates (optional but good for safety)
+        existing = db["products"].find_one(
+            {"Medicine Name": {"$regex": f"^{p.medicine_name}$", "$options": "i"}}
+        )
+        if existing:
+            continue  # Skip existing
+
+        new_docs.append({
+            "Medicine Name": p.medicine_name,
+            "Category": p.category,
+            "Current Stock": p.stock,
+            "Generic Name": p.generic_name,
+            "Brand Name": p.brand_name,
+            "Batch Number": p.batch_no,
+            "Expiry Date": p.expiry_date,
+            "MRP": p.mrp,
+            "Selling Price": p.selling_price,
+            "Schedule": p.schedule,
+            "Prescription Required": p.prescription_required,
+            "Product ID": f"M-{count + 1000 + len(new_docs)}",
+            "Safety Check": "Validated",
+            "last_updated": datetime.utcnow(),
+        })
+
+    if new_docs:
+        db["products"].insert_many(new_docs)
+
+    return {
+        "status": "ok",
+        "message": f"Successfully added {len(new_docs)} products. {len(products) - len(new_docs)} skipped (duplicates).",
     }
 
 
