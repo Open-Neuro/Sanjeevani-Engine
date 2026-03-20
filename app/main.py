@@ -34,7 +34,6 @@ from slowapi.util import get_remote_address
 
 from app.api import (
     alerts,
-    auth,
     customers,
     dashboard,
     orders,
@@ -141,7 +140,7 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────────────
     prefix = settings.API_PREFIX
-    app.include_router(auth.router, prefix=prefix)
+    app.include_router(dashboard.router, prefix=prefix)
     app.include_router(dashboard.router, prefix=prefix)
     app.include_router(customers.router, prefix=prefix)
     app.include_router(products.router, prefix=prefix)

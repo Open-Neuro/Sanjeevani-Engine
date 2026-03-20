@@ -9,13 +9,14 @@ import requests as req
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING
 
 from app.database.mongo_client import get_db
 from app.modules.safety_validation import SafetyValidationService
 from app.utils.logger import get_logger
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 logger = get_logger(__name__)
@@ -32,6 +33,7 @@ def list_orders(
     channel: Optional[str] = Query(default=None),
     sort_by: str = Query(default="Order Date"),
     sort_order: str = Query(default="desc", regex="^(asc|desc)$"),
+    user: dict = Depends(get_current_user),
 ):
     """
     Paginated order list with filters for:
@@ -73,7 +75,7 @@ def list_orders(
 
 
 @router.get("/stats", summary="Order statistics summary")
-def order_stats():
+def order_stats(user: dict = Depends(get_current_user)):
     """Aggregate counts by status, channel and payment method."""
     db = get_db()
 
@@ -107,7 +109,7 @@ class ValidateOrderRequest(BaseModel):
 
 
 @router.post("/validate", summary="Validate an order before placing")
-def validate_order(body: ValidateOrderRequest):
+def validate_order(body: ValidateOrderRequest, user: dict = Depends(get_current_user)):
     """
     Run all safety checks on a proposed order.
     Returns ``is_valid``, individual check results, and a summary.
@@ -125,7 +127,7 @@ def validate_order(body: ValidateOrderRequest):
 
 
 @router.get("/{order_id}", summary="Get a single order by Order ID")
-def get_order(order_id: str):
+def get_order(order_id: str, user: dict = Depends(get_current_user)):
     """Fetch one order record by its ``Order ID`` field."""
     db = get_db()
     order = db["consumer_orders"].find_one({"Order ID": order_id}, {"_id": 0})
@@ -139,7 +141,7 @@ class UpdateOrderStatusRequest(BaseModel):
 
 
 @router.patch("/{order_id}/status", summary="Update order status (Approve/Reject)")
-def update_order_status(order_id: str, body: UpdateOrderStatusRequest):
+def update_order_status(order_id: str, body: UpdateOrderStatusRequest, user: dict = Depends(get_current_user)):
     """
     Update the status of an order.
     If status is 'Completed' or 'Validated', it checks inventory and deducts stock.
@@ -195,7 +197,7 @@ def update_order_status(order_id: str, body: UpdateOrderStatusRequest):
     "/{order_id}/confirm",
     summary="Pharmacist confirms & dispatches order — notifies patient",
 )
-def confirm_and_dispatch_order(order_id: str):
+def confirm_and_dispatch_order(order_id: str, user: dict = Depends(get_current_user)):
     """
     Called when pharmacist clicks 'Place Order' in the dashboard UI.
 

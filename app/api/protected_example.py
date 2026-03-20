@@ -8,7 +8,7 @@ to require authentication on your endpoints.
 """
 
 from fastapi import APIRouter, Depends
-from app.api.auth import get_current_user
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/protected", tags=["Protected Examples"])
 

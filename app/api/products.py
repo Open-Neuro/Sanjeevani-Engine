@@ -7,13 +7,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pymongo import ASCENDING, DESCENDING
 
 from pydantic import BaseModel
 from app.database.mongo_client import get_db
 from app.modules.inventory_intelligence import InventoryIntelligenceService
 from app.utils.logger import get_logger
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/products", tags=["Products"])
 logger = get_logger(__name__)
@@ -35,7 +36,7 @@ class ProductCreate(BaseModel):
 
 
 @router.post("/", summary="Add a new product")
-def add_product(product: ProductCreate):
+def add_product(product: ProductCreate, user: dict = Depends(get_current_user)):
     """Manually add a product to the catalog."""
     db = get_db()
 
@@ -74,7 +75,7 @@ def add_product(product: ProductCreate):
 
 
 @router.post("/bulk", summary="Bulk add products")
-def bulk_add_products(products: list[ProductCreate]):
+def bulk_add_products(products: list[ProductCreate], user: dict = Depends(get_current_user)):
     """Bulk add products to the catalog."""
     db = get_db()
     count = db["products"].count_documents({})
@@ -122,6 +123,7 @@ def list_products(
     category: Optional[str] = Query(default=None),
     sort_by: str = Query(default="Medicine Name"),
     sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+    user: dict = Depends(get_current_user),
 ):
     """Paginated product catalogue with search + category filter."""
     db = get_db()
@@ -156,7 +158,7 @@ def list_products(
 
 
 @router.get("/low-stock", summary="Low-stock items")
-def low_stock():
+def low_stock(user: dict = Depends(get_current_user)):
     """Return products where current stock is < average weekly sales"""
     db = get_db()
 
@@ -233,7 +235,7 @@ def low_stock():
 
 
 @router.get("/expiry-risk", summary="Expiry risk items")
-def expiry_risk(days: int = Query(default=90, ge=1, le=365)):
+def expiry_risk(days: int = Query(default=90, ge=1, le=365), user: dict = Depends(get_current_user)):
     """Return products that have more stock than can be sold before expiry based on avg weekly sales."""
     db = get_db()
     orders = list(db["consumer_orders"].find())
@@ -339,19 +341,19 @@ def expiry_risk(days: int = Query(default=90, ge=1, le=365)):
 
 
 @router.get("/reorder-recommendations", summary="Reorder recommendations")
-def reorder_recommendations():
+def reorder_recommendations(user: dict = Depends(get_current_user)):
     """Recommended restocking quantities for all low-stock items."""
     return {"status": "ok", "data": _inv.get_reorder_recommendations()}
 
 
 @router.get("/movement-patterns", summary="Sales velocity classification")
-def movement_patterns():
+def movement_patterns(user: dict = Depends(get_current_user)):
     """Classify products as fast / medium / slow / no movement."""
     return {"status": "ok", "data": _inv.analyze_movement_patterns()}
 
 
 @router.get("/{product_id}", summary="Get single product")
-def get_product(product_id: str):
+def get_product(product_id: str, user: dict = Depends(get_current_user)):
     """Fetch one product by Product ID or Medicine Name."""
     db = get_db()
     prod = db["products"].find_one(
@@ -366,7 +368,7 @@ def get_product(product_id: str):
 
 
 @router.get("/{product_id}/forecast", summary="Demand forecast")
-def demand_forecast(product_id: str, days: int = Query(default=30, ge=1, le=365)):
+def demand_forecast(product_id: str, days: int = Query(default=30, ge=1, le=365), user: dict = Depends(get_current_user)):
     """SMA-based demand forecast for a product."""
     try:
         data = _inv.forecast_demand(product_id, days=days)
@@ -376,7 +378,7 @@ def demand_forecast(product_id: str, days: int = Query(default=30, ge=1, le=365)
 
 
 @router.get("/{product_id}/trend", summary="Demand trend")
-def demand_trend(product_id: str):
+def demand_trend(product_id: str, user: dict = Depends(get_current_user)):
     """Monthly demand trend (increasing / stable / decreasing)."""
     try:
         return {"status": "ok", "data": _inv.analyze_demand_trend(product_id)}

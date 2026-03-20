@@ -92,19 +92,8 @@ class Settings(BaseSettings):
         description="Secret key for signing tokens.  Must be overridden in prod.",
     )
 
-    # ── Google OAuth ──────────────────────────────────────────────────────────
-    GOOGLE_CLIENT_ID: str = Field(
-        default="",
-        description="Google OAuth 2.0 Client ID from Google Cloud Console.",
-    )
-    GOOGLE_CLIENT_SECRET: str = Field(
-        default="",
-        description="Google OAuth 2.0 Client Secret from Google Cloud Console.",
-    )
-    GOOGLE_REDIRECT_URI: str = Field(
-        default="http://localhost:8000/api/v1/auth/callback",
-        description="OAuth callback URL (must match Google Console config).",
-    )
+    # Google OAuth is now handled by Sanjeevani Auth service.
+    # JWT authentication below is used to verify tokens from that service.
 
     # ── JWT ───────────────────────────────────────────────────────────────────
     JWT_SECRET: str = Field(
