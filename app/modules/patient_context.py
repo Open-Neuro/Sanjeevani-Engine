@@ -29,7 +29,13 @@ class PatientContextService:
     """All methods are stateless read-only operations over MongoDB."""
 
     def __init__(self) -> None:
-        self.db = get_db()
+        self._db = None
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = get_db()
+        return self._db
 
     # ──────────────────────────────────────────────────────────────────────
     # 1. get_patient_profile

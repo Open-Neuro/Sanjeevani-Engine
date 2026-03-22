@@ -30,9 +30,15 @@ class RecommendationEngine:
     """Rule-based personalised medicine recommendation engine."""
 
     def __init__(self) -> None:
-        self.db = get_db()
+        self._db = None
         self.patient_ctx = PatientContextService()
         self.safety_svc = SafetyValidationService()
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = get_db()
+        return self._db
 
     # ──────────────────────────────────────────────────────────────────────
     # 1. generate_refill_recommendations
