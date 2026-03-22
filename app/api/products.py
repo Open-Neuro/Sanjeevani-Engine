@@ -61,7 +61,8 @@ def add_product(product: ProductCreate, user: dict = Depends(get_current_user)):
         "Selling Price": product.selling_price,
         "Schedule": product.schedule,
         "Prescription Required": product.prescription_required,
-        "Product ID": f"M-{db['products'].count_documents({}) + 1000}",
+        "Product ID": f"M-{db['products'].count_documents({'merchant_id': user['merchant_id']}) + 1000}",
+        "merchant_id": user["merchant_id"],
         "Safety Check": "Validated",
         "last_updated": datetime.utcnow(),
     }
@@ -102,6 +103,7 @@ def bulk_add_products(products: list[ProductCreate], user: dict = Depends(get_cu
             "Schedule": p.schedule,
             "Prescription Required": p.prescription_required,
             "Product ID": f"M-{count + 1000 + len(new_docs)}",
+            "merchant_id": user["merchant_id"],
             "Safety Check": "Validated",
             "last_updated": datetime.utcnow(),
         })

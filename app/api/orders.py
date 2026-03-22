@@ -40,7 +40,7 @@ def list_orders(
     patient_id, status, medicine, channel.
     """
     db = get_db()
-    query: dict = {}
+    query: dict = {"merchant_id": user["merchant_id"]}
 
     if patient_id:
         query["$or"] = [
@@ -84,6 +84,7 @@ def order_stats(user: dict = Depends(get_current_user)):
             {"label": r["_id"] or "Unknown", "count": r["count"]}
             for r in db["consumer_orders"].aggregate(
                 [
+                    {"$match": {"merchant_id": user["merchant_id"]}},
                     {"$group": {"_id": f"${field}", "count": {"$sum": 1}}},
                     {"$sort": {"count": -1}},
                 ]
@@ -96,7 +97,7 @@ def order_stats(user: dict = Depends(get_current_user)):
             "by_status": _agg("Order Status"),
             "by_channel": _agg("Order Channel"),
             "by_payment": _agg("Payment Method"),
-            "total": db["consumer_orders"].count_documents({}),
+            "total": db["consumer_orders"].count_documents({"merchant_id": user["merchant_id"]}),
         },
     }
 
@@ -130,7 +131,10 @@ def validate_order(body: ValidateOrderRequest, user: dict = Depends(get_current_
 def get_order(order_id: str, user: dict = Depends(get_current_user)):
     """Fetch one order record by its ``Order ID`` field."""
     db = get_db()
-    order = db["consumer_orders"].find_one({"Order ID": order_id}, {"_id": 0})
+    order = db["consumer_orders"].find_one(
+        {"Order ID": order_id, "merchant_id": user["merchant_id"]}, 
+        {"_id": 0}
+    )
     if not order:
         raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
     return {"status": "ok", "data": order}
@@ -158,7 +162,10 @@ def update_order_status(order_id: str, body: UpdateOrderStatusRequest, user: dic
 
     if new_status in ["Completed", "Validated"]:
         product = db["products"].find_one(
-            {"Medicine Name": {"$regex": f"^{medicine_name}$", "$options": "i"}}
+            {
+                "Medicine Name": {"$regex": f"^{medicine_name}$", "$options": "i"},
+                "merchant_id": user["merchant_id"]
+            }
         )
         if product:
             current_stock = float(product.get("Current Stock", 0))
@@ -213,13 +220,14 @@ def confirm_and_dispatch_order(order_id: str, user: dict = Depends(get_current_u
     order = db["consumer_orders"].find_one(
         {
             "Order ID": order_id,
+            "merchant_id": user["merchant_id"],
             "Order Status": {"$nin": ["Completed", "Delivered", "Rejected"]},
         }
     )
 
     if not order:
         # Fall back: check if it exists at all so we can give a clearer error
-        exists = db["consumer_orders"].find_one({"Order ID": order_id})
+        exists = db["consumer_orders"].find_one({"Order ID": order_id, "merchant_id": user["merchant_id"]})
         if exists:
             current = exists.get("Order Status", "Unknown")
             raise HTTPException(

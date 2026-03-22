@@ -37,6 +37,7 @@ def list_alerts(
     patient_id: Optional[str] = Query(None),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    user: dict = Depends(get_current_user),
 ):
     """
     Paginated alert list with filtering by type, severity, resolution
@@ -61,7 +62,7 @@ def list_alerts(
     sort_order = _res(sort_order, "desc")
 
     db = get_db()
-    query: dict = {}
+    query: dict = {"merchant_id": user["merchant_id"]}
     if alert_type:
         query["alert_type"] = alert_type
     if severity:
@@ -106,13 +107,14 @@ def get_inventory_alerts():
 
 
 @router.get("/summary", summary="Alert counts by type and severity")
-def alert_summary():
+def alert_summary(user: dict = Depends(get_current_user)):
     """Quick telemetry: counts grouped by alert_type and severity."""
     db = get_db()
 
     by_type = list(
         db["alerts"].aggregate(
             [
+                {"$match": {"merchant_id": user["merchant_id"]}},
                 {
                     "$group": {
                         "_id": "$alert_type",
@@ -129,12 +131,13 @@ def alert_summary():
     by_severity = list(
         db["alerts"].aggregate(
             [
+                {"$match": {"merchant_id": user["merchant_id"]}},
                 {"$group": {"_id": "$severity", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
             ]
         )
     )
-    total_unresolved = db["alerts"].count_documents({"is_resolved": False})
+    total_unresolved = db["alerts"].count_documents({"is_resolved": False, "merchant_id": user["merchant_id"]})
 
     return {
         "status": "ok",
@@ -152,20 +155,20 @@ def alert_summary():
 
 
 @router.post("/generate/inventory", summary="Generate inventory alerts on-demand")
-def generate_inventory_alerts():
+def generate_inventory_alerts(user: dict = Depends(get_current_user)):
     """Scan inventory and upsert low-stock + expiry-risk alerts."""
     try:
-        counts = _inv_svc.generate_inventory_alerts()
+        counts = _inv_svc.generate_inventory_alerts(merchant_id=user["merchant_id"])
         return {"status": "ok", "data": counts}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/generate/safety", summary="Generate safety alerts on-demand")
-def generate_safety_alerts():
+def generate_safety_alerts(user: dict = Depends(get_current_user)):
     """Scan pending orders and create interaction-warning alerts."""
     try:
-        result = _saf_svc.generate_safety_alerts()
+        result = _saf_svc.generate_safety_alerts(merchant_id=user["merchant_id"])
         return {"status": "ok", "data": result}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -183,6 +186,7 @@ class ResolveRequest(BaseModel):
 def resolve_alert(
     alert_id: str = Path(..., description="Hex ObjectId of the alert"),
     body: ResolveRequest = Body(default_factory=ResolveRequest),
+    user: dict = Depends(get_current_user),
 ):
     """
     Mark an alert as resolved by a pharmacist.
@@ -197,7 +201,7 @@ def resolve_alert(
 
     now = datetime.now(tz=timezone.utc)
     result = db["alerts"].find_one_and_update(
-        {"_id": ObjectId(alert_id)},
+        {"_id": ObjectId(alert_id), "merchant_id": user["merchant_id"]},
         {
             "$set": {
                 "is_resolved": True,
@@ -216,7 +220,7 @@ def resolve_alert(
 
 
 @router.get("/{alert_id}", summary="Get single alert by ID")
-def get_alert(alert_id: str):
+def get_alert(alert_id: str, user: dict = Depends(get_current_user)):
     """Fetch one alert by its MongoDB ObjectId."""
     db = get_db()
     if not ObjectId.is_valid(alert_id):

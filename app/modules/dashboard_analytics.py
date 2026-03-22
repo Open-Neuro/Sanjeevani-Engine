@@ -50,7 +50,7 @@ class DashboardAnalyticsService:
     # 1. get_overview_metrics
     # ──────────────────────────────────────────────────────────────────────
 
-    def get_overview_metrics(self) -> Dict[str, Any]:
+    def get_overview_metrics(self, merchant_id: str) -> Dict[str, Any]:
         """
         High-level KPIs for the dashboard header:
         - Total patients, total orders, total products
@@ -60,19 +60,23 @@ class DashboardAnalyticsService:
         - Low-stock items
         - Expiry-risk items
         """
-        cache_key = "overview_metrics"
+        cache_key = f"{merchant_id}_overview_metrics"
         if cache_key in _CACHE:
             return _CACHE[cache_key]
 
         now = datetime.now(tz=timezone.utc)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        total_patients = self.db["patients"].count_documents({})
-        total_orders = self.db["consumer_orders"].count_documents({})
-        total_products = self.db["products"].count_documents({})
+        total_patients = self.db["patients"].count_documents({"merchant_id": merchant_id})
+        total_orders = self.db["consumer_orders"].count_documents({"merchant_id": merchant_id})
+        total_products = self.db["products"].count_documents({"merchant_id": merchant_id})
+        
+        # Dashboard health
+        dashboard_filter = {"merchant_id": merchant_id}
 
         # Revenue aggregation
         rev_pipeline = [
+            {"$match": {"merchant_id": merchant_id}},
             {"$group": {"_id": None, "total": {"$sum": "$Total Amount"}}},
         ]
         rev_res = list(self.db["consumer_orders"].aggregate(rev_pipeline))
@@ -80,18 +84,18 @@ class DashboardAnalyticsService:
 
         # Monthly revenue
         month_rev_pipeline = [
-            {"$match": {"Order Date": {"$gte": month_start}}},
+            {"$match": {"Order Date": {"$gte": month_start}, "merchant_id": merchant_id}},
             {"$group": {"_id": None, "total": {"$sum": "$Total Amount"}}},
         ]
         month_rev_res = list(self.db["consumer_orders"].aggregate(month_rev_pipeline))
         monthly_revenue = month_rev_res[0]["total"] if month_rev_res else 0.0
 
-        active_alerts = self.db["alerts"].count_documents({"is_resolved": False})
+        active_alerts = self.db["alerts"].count_documents({"is_resolved": False, "merchant_id": merchant_id})
         high_risk_preds = self.db["predictions"].count_documents(
-            {"risk_level": {"$in": ["critical", "high"]}, "is_actioned": False}
+            {"risk_level": {"$in": ["critical", "high"]}, "is_actioned": False, "merchant_id": merchant_id}
         )
-        low_stock = self.db["inventory"].count_documents({"is_low_stock": True})
-        expiry_risk = self.db["inventory"].count_documents({"is_expiry_risk": True})
+        low_stock = self.db["inventory"].count_documents({"is_low_stock": True, "merchant_id": merchant_id})
+        expiry_risk = self.db["inventory"].count_documents({"is_expiry_risk": True, "merchant_id": merchant_id})
 
         result = {
             "total_patients": total_patients,
@@ -112,7 +116,7 @@ class DashboardAnalyticsService:
     # 2. get_customer_insights
     # ──────────────────────────────────────────────────────────────────────
 
-    def get_customer_insights(self) -> Dict[str, Any]:
+    def get_customer_insights(self, merchant_id: str) -> Dict[str, Any]:
         """
         Demographics and behaviour stats:
         - Gender breakdown
@@ -121,7 +125,7 @@ class DashboardAnalyticsService:
         - Top diagnoses
         - Chronic vs acute split
         """
-        cache_key = "customer_insights"
+        cache_key = f"{merchant_id}_customer_insights"
         if cache_key in _CACHE:
             return _CACHE[cache_key]
 
@@ -129,7 +133,7 @@ class DashboardAnalyticsService:
             return list(
                 self.db["consumer_orders"].aggregate(
                     [
-                        {"$match": {field: {"$exists": True, "$ne": None}}},
+                        {"$match": {field: {"$exists": True, "$ne": None}, "merchant_id": merchant_id}},
                         {"$group": {"_id": f"${field}", "count": {"$sum": 1}}},
                         {"$sort": {"count": -1}},
                         {"$limit": 10},
@@ -150,7 +154,7 @@ class DashboardAnalyticsService:
 
         # Age bins
         age_pipeline = [
-            {"$match": {"Age": {"$exists": True, "$ne": None, "$gt": 0}}},
+            {"$match": {"Age": {"$exists": True, "$ne": None, "$gt": 0}, "merchant_id": merchant_id}},
             {
                 "$bucket": {
                     "groupBy": "$Age",
@@ -171,8 +175,8 @@ class DashboardAnalyticsService:
         ]
 
         # Chronic split
-        chronic_y = self.db["consumer_orders"].count_documents({"Is Chronic": "Yes"})
-        chronic_n = self.db["consumer_orders"].count_documents({"Is Chronic": "No"})
+        chronic_y = self.db["consumer_orders"].count_documents({"Is Chronic": "Yes", "merchant_id": merchant_id})
+        chronic_n = self.db["consumer_orders"].count_documents({"Is Chronic": "No", "merchant_id": merchant_id})
 
         result = {
             "gender_distribution": gender_data,
@@ -191,7 +195,7 @@ class DashboardAnalyticsService:
     # 3. get_product_analytics
     # ──────────────────────────────────────────────────────────────────────
 
-    def get_product_analytics(self) -> Dict[str, Any]:
+    def get_product_analytics(self, merchant_id: str) -> Dict[str, Any]:
         """
         Product-level insights:
         - Top 10 medicines by order count
@@ -200,13 +204,14 @@ class DashboardAnalyticsService:
         - Low-stock summary
         - Expiry risk summary
         """
-        cache_key = "product_analytics"
+        cache_key = f"{merchant_id}_product_analytics"
         if cache_key in _CACHE:
             return _CACHE[cache_key]
 
         top_by_orders = list(
             self.db["consumer_orders"].aggregate(
                 [
+                    {"$match": {"merchant_id": merchant_id}},
                     {
                         "$group": {
                             "_id": "$Medicine Name",
@@ -226,7 +231,7 @@ class DashboardAnalyticsService:
         category_data = list(
             self.db["consumer_orders"].aggregate(
                 [
-                    {"$match": {"Medicine Category": {"$exists": True, "$ne": None}}},
+                    {"$match": {"Medicine Category": {"$exists": True, "$ne": None}, "merchant_id": merchant_id}},
                     {"$group": {"_id": "$Medicine Category", "count": {"$sum": 1}}},
                     {"$sort": {"count": -1}},
                 ]
@@ -254,10 +259,10 @@ class DashboardAnalyticsService:
                 {"category": r["_id"], "count": r["count"]} for r in category_data
             ],
             "low_stock_count": self.db["inventory"].count_documents(
-                {"is_low_stock": True}
+                {"is_low_stock": True, "merchant_id": merchant_id}
             ),
             "expiry_risk_count": self.db["inventory"].count_documents(
-                {"is_expiry_risk": True}
+                {"is_expiry_risk": True, "merchant_id": merchant_id}
             ),
         }
         _CACHE[cache_key] = result
@@ -267,7 +272,7 @@ class DashboardAnalyticsService:
     # 4. get_order_analytics
     # ──────────────────────────────────────────────────────────────────────
 
-    def get_order_analytics(self) -> Dict[str, Any]:
+    def get_order_analytics(self, merchant_id: str) -> Dict[str, Any]:
         """
         Order-level analytics:
         - Status breakdown (Pending / Fulfilled / Cancelled)
@@ -275,13 +280,14 @@ class DashboardAnalyticsService:
         - Payment method split
         - Average order value
         """
-        cache_key = "order_analytics"
+        cache_key = f"{merchant_id}_order_analytics"
         if cache_key in _CACHE:
             return _CACHE[cache_key]
 
         status_data = list(
             self.db["consumer_orders"].aggregate(
                 [
+                    {"$match": {"merchant_id": merchant_id}},
                     {"$group": {"_id": "$Order Status", "count": {"$sum": 1}}},
                 ]
             )
@@ -290,7 +296,7 @@ class DashboardAnalyticsService:
         payment_data = list(
             self.db["consumer_orders"].aggregate(
                 [
-                    {"$match": {"Payment Method": {"$exists": True, "$ne": None}}},
+                    {"$match": {"Payment Method": {"$exists": True, "$ne": None}, "merchant_id": merchant_id}},
                     {"$group": {"_id": "$Payment Method", "count": {"$sum": 1}}},
                     {"$sort": {"count": -1}},
                 ]
@@ -298,6 +304,7 @@ class DashboardAnalyticsService:
         )
 
         avg_pipeline = [
+            {"$match": {"merchant_id": merchant_id}},
             {"$group": {"_id": None, "avg_value": {"$avg": "$Total Amount"}}},
         ]
         avg_res = list(self.db["consumer_orders"].aggregate(avg_pipeline))
@@ -305,7 +312,7 @@ class DashboardAnalyticsService:
 
         since30 = datetime.now(tz=timezone.utc) - timedelta(days=30)
         daily_pipeline = [
-            {"$match": {"Order Date": {"$gte": since30}}},
+            {"$match": {"Order Date": {"$gte": since30}, "merchant_id": merchant_id}},
             {
                 "$group": {
                     "_id": {
@@ -345,7 +352,7 @@ class DashboardAnalyticsService:
     # ──────────────────────────────────────────────────────────────────────
 
     def get_timeseries_data(
-        self, metric: str = "orders", period: str = "30d"
+        self, metric: str = "orders", period: str = "30d", merchant_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Return daily time-series data for a given metric.
@@ -357,7 +364,7 @@ class DashboardAnalyticsService:
 
         Returns list of ``{date, value}`` dicts.
         """
-        cache_key = f"timeseries_{metric}_{period}"
+        cache_key = f"{merchant_id}_timeseries_{metric}_{period}"
         if cache_key in _CACHE:
             return _CACHE[cache_key]
 
@@ -367,7 +374,7 @@ class DashboardAnalyticsService:
 
         group_value = {"$sum": "$Total Amount"} if metric == "revenue" else {"$sum": 1}
         pipeline = [
-            {"$match": {"Order Date": {"$gte": since}}},
+            {"$match": {"Order Date": {"$gte": since}, "merchant_id": merchant_id}},
             {
                 "$group": {
                     "_id": {
@@ -394,7 +401,7 @@ class DashboardAnalyticsService:
     # 6. refresh_dashboard_cache
     # ──────────────────────────────────────────────────────────────────────
 
-    def refresh_dashboard_cache(self) -> Dict[str, Any]:
+    def refresh_dashboard_cache(self, merchant_id: str) -> Dict[str, Any]:
         """
         Force-refresh all cached metrics.
 
@@ -405,12 +412,12 @@ class DashboardAnalyticsService:
         _CACHE.clear()
 
         start = time.perf_counter()
-        self.get_overview_metrics()
-        self.get_customer_insights()
-        self.get_product_analytics()
-        self.get_order_analytics()
-        self.get_timeseries_data("orders", "30d")
-        self.get_timeseries_data("revenue", "30d")
+        self.get_overview_metrics(merchant_id=merchant_id)
+        self.get_customer_insights(merchant_id=merchant_id)
+        self.get_product_analytics(merchant_id=merchant_id)
+        self.get_order_analytics(merchant_id=merchant_id)
+        self.get_timeseries_data("orders", "30d", merchant_id=merchant_id)
+        self.get_timeseries_data("revenue", "30d", merchant_id=merchant_id)
         elapsed = round((time.perf_counter() - start) * 1000, 1)
 
         logger.info("Dashboard cache refreshed", extra={"elapsed_ms": elapsed})

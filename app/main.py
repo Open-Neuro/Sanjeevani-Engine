@@ -72,19 +72,26 @@ async def lifespan(app: FastAPI):
         extra={"env": settings.ENV, "prefix": settings.API_PREFIX},
     )
     try:
-        get_client()  # validates connection; raises on failure
+        # We try to connect, but don't block the entire startup if it fails
+        # so that Render's health check can still see the app is "running".
+        get_client()  
         logger.info("MongoDB ready ✓")
     except Exception as exc:
-        logger.critical(
-            "MongoDB connection failed at startup", extra={"error": str(exc)}
+        logger.error(
+            "MongoDB connection failed at startup - App will continue in degraded mode", 
+            extra={"error": str(exc)}
         )
-        raise
+        # We don't re-raise here to allow the app to bind to the port
+        # and respond to health checks.
 
     yield  # ── application is live ──────────────────────────────────────
 
     logger.info("SanjeevaniRxAI API shutting down…")
-    close_client()
-    logger.info("Shutdown complete ✓")
+    try:
+        close_client()
+        logger.info("Shutdown complete ✓")
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────

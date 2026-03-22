@@ -68,6 +68,7 @@ class SafetyValidationService:
         patient_id: str,
         product_id: str,
         quantity: float,
+        merchant_id: str,
         *,
         prescription_provided: bool = False,
     ) -> Dict[str, Any]:
@@ -84,12 +85,12 @@ class SafetyValidationService:
         checks: List[Dict[str, Any]] = []
 
         rx_check = self.check_prescription_required(
-            product_id, provided=prescription_provided
+            product_id, merchant_id, provided=prescription_provided
         )
-        expiry_check = self.check_expiry(product_id)
-        avail_check = self.check_availability(product_id, quantity)
-        duplicate_chk = self.check_duplicate_recent(patient_id, product_id)
-        qty_check = self.validate_quantity(patient_id, product_id, quantity)
+        expiry_check = self.check_expiry(product_id, merchant_id)
+        avail_check = self.check_availability(product_id, quantity, merchant_id)
+        duplicate_chk = self.check_duplicate_recent(patient_id, product_id, merchant_id)
+        qty_check = self.validate_quantity(patient_id, product_id, quantity, merchant_id)
 
         checks.extend([rx_check, expiry_check, avail_check, duplicate_chk, qty_check])
 
@@ -136,7 +137,7 @@ class SafetyValidationService:
     # ──────────────────────────────────────────────────────────────────────
 
     def check_prescription_required(
-        self, product_id: str, *, provided: bool = False
+        self, product_id: str, merchant_id: str, *, provided: bool = False
     ) -> Dict[str, Any]:
         """
         Check whether *product_id* requires a prescription.
@@ -168,7 +169,7 @@ class SafetyValidationService:
     # 3. check_expiry
     # ──────────────────────────────────────────────────────────────────────
 
-    def check_expiry(self, product_id: str) -> Dict[str, Any]:
+    def check_expiry(self, product_id: str, merchant_id: str) -> Dict[str, Any]:
         """
         Return an error if the product is already expired.
         Return a warning if it expires within 30 days.
@@ -214,7 +215,7 @@ class SafetyValidationService:
     # 4. check_availability
     # ──────────────────────────────────────────────────────────────────────
 
-    def check_availability(self, product_id: str, quantity: float) -> Dict[str, Any]:
+    def check_availability(self, product_id: str, quantity: float, merchant_id: str) -> Dict[str, Any]:
         """
         Hard fail if available stock < requested quantity.
         Warning if stock will drop below reorder level after this order.
@@ -247,7 +248,7 @@ class SafetyValidationService:
     # ──────────────────────────────────────────────────────────────────────
 
     def check_duplicate_recent(
-        self, patient_id: str, product_id: str, days: int = 30
+        self, patient_id: str, product_id: str, merchant_id: str, days: int = 30
     ) -> Dict[str, Any]:
         """
         Warn if the same patient ordered the same product within *days* days.
@@ -262,6 +263,7 @@ class SafetyValidationService:
                 "Medicine Name": product_id,
                 "Order Date": {"$gte": since},
                 "Order Status": {"$ne": "Cancelled"},
+                "merchant_id": merchant_id,
             }
         )
         if recent:
@@ -285,7 +287,7 @@ class SafetyValidationService:
     # ──────────────────────────────────────────────────────────────────────
 
     def validate_quantity(
-        self, patient_id: str, product_id: str, quantity: float
+        self, patient_id: str, product_id: str, quantity: float, merchant_id: str
     ) -> Dict[str, Any]:
         """
         Flag unusual quantities (>3× patient's historical average for this product).
@@ -331,7 +333,7 @@ class SafetyValidationService:
     # 7. generate_safety_alerts
     # ──────────────────────────────────────────────────────────────────────
 
-    def generate_safety_alerts(self) -> Dict[str, int]:
+    def generate_safety_alerts(self, merchant_id: str) -> Dict[str, int]:
         """
         Scan all pending (undelivered) orders and create interaction_warning
         alerts for those that fail safety checks.

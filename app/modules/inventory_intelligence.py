@@ -44,7 +44,7 @@ class InventoryIntelligenceService:
     # 1. check_low_stock
     # ──────────────────────────────────────────────────────────────────────
 
-    def check_low_stock(self) -> List[Dict[str, Any]]:
+    def check_low_stock(self, merchant_id: str) -> List[Dict[str, Any]]:
         """
         Return inventory items where ``current_stock <= reorder_level``.
 
@@ -55,7 +55,7 @@ class InventoryIntelligenceService:
         """
         items = list(
             self.db["inventory"].find(
-                {"is_low_stock": True},
+                {"is_low_stock": True, "merchant_id": merchant_id},
                 {
                     "_id": 0,
                     "product_id": 1,
@@ -89,7 +89,7 @@ class InventoryIntelligenceService:
     # 2. check_expiry_risk
     # ──────────────────────────────────────────────────────────────────────
 
-    def check_expiry_risk(self, days: int = 90) -> List[Dict[str, Any]]:
+    def check_expiry_risk(self, merchant_id: str, days: int = 90) -> List[Dict[str, Any]]:
         """
         Return items expiring within *days* calendar days.
         Includes ``days_until_expiry`` and ``urgency`` (critical/high/medium).
@@ -98,7 +98,8 @@ class InventoryIntelligenceService:
         cutoff = now + timedelta(days=days)
         result = []
 
-        for item in self.db["inventory"].find({"expiry_date": {"$ne": None}}):
+        for item in self.db["inventory"].find({"expiry_date": {"$ne": None}, "merchant_id": merchant_id}):
+理论上这里应该有一个空行。
             exp_raw = item.get("expiry_date")
             try:
                 if isinstance(exp_raw, str):
@@ -138,7 +139,7 @@ class InventoryIntelligenceService:
     # 3. analyze_movement_patterns
     # ──────────────────────────────────────────────────────────────────────
 
-    def analyze_movement_patterns(self) -> List[Dict[str, Any]]:
+    def analyze_movement_patterns(self, merchant_id: str) -> List[Dict[str, Any]]:
         """
         Classify each product's sales velocity as:
         - ``fast_moving``:  top quartile order frequency
@@ -158,6 +159,19 @@ class InventoryIntelligenceService:
                     "_id": "$Medicine Name",
                     "total_orders": {"$sum": 1},
                     "last_30d": {
+                        "$sum": {"$cond": [{"$and": [{"$gte": ["$Order Date", since]}, {"$eq": ["$merchant_id", merchant_id]}]}, 1, 0]}
+                    },
+                }
+            },
+        ]
+        # Wait, it's better to $match merchant_id early in pipeline
+        pipeline = [
+            {"$match": {"merchant_id": merchant_id}},
+            {
+                "$group": {
+                    "_id": "$Medicine Name",
+                    "total_orders": {"$sum": 1},
+                    "last_30d": {
                         "$sum": {"$cond": [{"$gte": ["$Order Date", since]}, 1, 0]}
                     },
                 }
@@ -171,7 +185,7 @@ class InventoryIntelligenceService:
 
         all_products = list(
             self.db["inventory"].find(
-                {}, {"_id": 0, "product_id": 1, "medicine_name": 1}
+                {"merchant_id": merchant_id}, {"_id": 0, "product_id": 1, "medicine_name": 1}
             )
         )
 
@@ -217,7 +231,7 @@ class InventoryIntelligenceService:
     # 4. analyze_demand_trend
     # ──────────────────────────────────────────────────────────────────────
 
-    def analyze_demand_trend(self, product_id: str) -> Dict[str, Any]:
+    def analyze_demand_trend(self, product_id: str, merchant_id: str) -> Dict[str, Any]:
         """
         Monthly demand trend for a single product.
 
@@ -225,7 +239,7 @@ class InventoryIntelligenceService:
         ``trend`` (increasing / decreasing / stable), and ``slope`` (Δ orders/month).
         """
         pipeline = [
-            {"$match": {"Medicine Name": product_id}},
+            {"$match": {"Medicine Name": product_id, "merchant_id": merchant_id}},
             {
                 "$group": {
                     "_id": {
@@ -273,7 +287,7 @@ class InventoryIntelligenceService:
     # 5. forecast_demand
     # ──────────────────────────────────────────────────────────────────────
 
-    def forecast_demand(self, product_id: str, days: int = 30) -> Dict[str, Any]:
+    def forecast_demand(self, product_id: str, merchant_id: str, days: int = 30) -> Dict[str, Any]:
         """
         Simple moving-average (SMA-3) demand forecast for the next *days* days.
 
@@ -287,7 +301,7 @@ class InventoryIntelligenceService:
         ``confidence``      – 0–1 based on data richness
         ``method``          – always ``"SMA-3 + trend"``
         """
-        trend_data = self.analyze_demand_trend(product_id)
+        trend_data = self.analyze_demand_trend(product_id, merchant_id=merchant_id)
         monthly = trend_data.get("monthly_demand", [])
         slope = trend_data.get("slope", 0.0)
 
@@ -327,7 +341,7 @@ class InventoryIntelligenceService:
     # 6. generate_inventory_alerts
     # ──────────────────────────────────────────────────────────────────────
 
-    def generate_inventory_alerts(self) -> Dict[str, int]:
+    def generate_inventory_alerts(self, merchant_id: str) -> Dict[str, int]:
         """
         Generate and upsert inventory alerts (low_stock + expiry_risk).
 
@@ -336,7 +350,7 @@ class InventoryIntelligenceService:
         now = datetime.now(tz=timezone.utc)
         low_count = expiry_count = 0
 
-        for item in self.check_low_stock():
+        for item in self.check_low_stock(merchant_id=merchant_id):
             alert = {
                 "alert_type": "low_stock",
                 "severity": item["urgency"],
@@ -350,6 +364,7 @@ class InventoryIntelligenceService:
                 "medicine_name": item["medicine_name"],
                 "product_id": item["product_id"],
                 "is_resolved": False,
+                "merchant_id": merchant_id,
                 "auto_actioned": False,
                 "created_at": now,
                 "updated_at": now,
@@ -365,7 +380,7 @@ class InventoryIntelligenceService:
             )
             low_count += 1
 
-        for item in self.check_expiry_risk(days=90):
+        for item in self.check_expiry_risk(merchant_id=merchant_id, days=90):
             alert = {
                 "alert_type": "expiry_risk",
                 "severity": item["urgency"],
@@ -404,19 +419,19 @@ class InventoryIntelligenceService:
     # 7. get_reorder_recommendations
     # ──────────────────────────────────────────────────────────────────────
 
-    def get_reorder_recommendations(self) -> List[Dict[str, Any]]:
+    def get_reorder_recommendations(self, merchant_id: str) -> List[Dict[str, Any]]:
         """
         Return reorder recommendations for every low-stock item.
 
         Recommended quantity = max(forecast_demand(30d), reorder_level × 2)
         to ensure a safety buffer.
         """
-        low_items = self.check_low_stock()
+        low_items = self.check_low_stock(merchant_id=merchant_id)
         recs = []
 
         for item in low_items:
             med_name = item["medicine_name"]
-            forecast = self.forecast_demand(med_name, days=30)
+            forecast = self.forecast_demand(med_name, merchant_id=merchant_id, days=30)
             reorder = float(item.get("reorder_level") or 0)
 
             recommended_qty = max(

@@ -58,7 +58,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     ENV=production \
-    PORT=8000 \
+    PORT=10000 \
     LOG_LEVEL=INFO
 
 # Data directory for mounted Excel files
@@ -66,10 +66,13 @@ RUN mkdir -p /app/data && chown -R appuser:appgroup /app
 
 USER appuser
 
+# Expose port (Render ignores this but good for clarity)
+EXPOSE 10000
+
 # Production server: uvicorn (using shell form to expand $PORT)
 CMD uvicorn app.main:app \
     --host 0.0.0.0 \
-    --port ${PORT:-8000} \
-    --workers 4 \
+    --port ${PORT:-10000} \
+    --workers 2 \
     --log-level info \
     --access-log

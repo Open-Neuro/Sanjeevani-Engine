@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         description="MongoDB connection URI (supports srv:// as well).",
     )
     DB_NAME: str = Field(
-        default="pharmacy_management",
+        default="sanjeevani_rx_db",
         description="MongoDB database name.",
     )
 

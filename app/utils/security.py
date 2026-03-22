@@ -37,4 +37,9 @@ async def get_current_user(
     """
     token = credentials.credentials
     user_data = verify_jwt_token(token)
+    
+    # Ensure merchant_id is present for multi-tenancy filtering
+    if "merchant_id" not in user_data:
+        user_data["merchant_id"] = user_data.get("email")
+        
     return user_data

@@ -19,7 +19,7 @@ _svc = DashboardAnalyticsService()
 def get_overview(user: dict = Depends(get_current_user)):
     """Return high-level KPI metrics for the dashboard header."""
     try:
-        return {"status": "ok", "data": _svc.get_overview_metrics()}
+        return {"status": "ok", "data": _svc.get_overview_metrics(merchant_id=user["merchant_id"])}
     except Exception as exc:
         logger.error("overview error", extra={"error": str(exc)})
         raise HTTPException(status_code=500, detail=str(exc))
@@ -29,7 +29,7 @@ def get_overview(user: dict = Depends(get_current_user)):
 def get_customer_insights(user: dict = Depends(get_current_user)):
     """Demographics and behaviour analytics."""
     try:
-        return {"status": "ok", "data": _svc.get_customer_insights()}
+        return {"status": "ok", "data": _svc.get_customer_insights(merchant_id=user["merchant_id"])}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -38,7 +38,7 @@ def get_customer_insights(user: dict = Depends(get_current_user)):
 def get_product_analytics(user: dict = Depends(get_current_user)):
     """Top medicines, category breakdown, inventory health."""
     try:
-        return {"status": "ok", "data": _svc.get_product_analytics()}
+        return {"status": "ok", "data": _svc.get_product_analytics(merchant_id=user["merchant_id"])}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -47,7 +47,7 @@ def get_product_analytics(user: dict = Depends(get_current_user)):
 def get_order_analytics(user: dict = Depends(get_current_user)):
     """Status breakdown, payment methods, average order value."""
     try:
-        return {"status": "ok", "data": _svc.get_order_analytics()}
+        return {"status": "ok", "data": _svc.get_order_analytics(merchant_id=user["merchant_id"])}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -60,7 +60,7 @@ def get_timeseries(
 ):
     """Daily time-series for orders or revenue."""
     try:
-        data = _svc.get_timeseries_data(metric=metric, period=period)
+        data = _svc.get_timeseries_data(metric=metric, period=period, merchant_id=user["merchant_id"])
         return {"status": "ok", "metric": metric, "period": period, "data": data}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -70,6 +70,6 @@ def get_timeseries(
 def refresh_cache(user: dict = Depends(get_current_user)):
     """Invalidate and pre-warm the in-memory analytics cache."""
     try:
-        return _svc.refresh_dashboard_cache()
+        return _svc.refresh_dashboard_cache(merchant_id=user["merchant_id"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
