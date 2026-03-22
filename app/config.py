@@ -189,6 +189,20 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("MONGO_URI", mode="before")
+    @classmethod
+    def assemble_db_url(cls, v: str, info: dict) -> str:
+        """
+        Support both MONGO_URI and MONGODB_URL environment variables.
+        If MONGO_URI is default/empty but MONGODB_URL is set, use the latter.
+        """
+        if not v or v == "mongodb://localhost:27017":
+            # Check for MONGODB_URL in environment or passed data
+            alt = os.getenv("MONGODB_URL")
+            if alt:
+                return alt
+        return v
+
     @field_validator("LOG_LEVEL", mode="before")
     @classmethod
     def upper_log_level(cls, v: str) -> str:
