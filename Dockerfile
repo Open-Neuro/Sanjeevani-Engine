@@ -49,6 +49,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY app/          ./app/
 COPY scripts/      ./scripts/
 COPY tests/        ./tests/
+COPY static/       ./static/
+COPY data/         ./data/
+COPY *.json *.csv  ./
 
 # Environment defaults (override via docker-compose / Kubernetes env)
 ENV PYTHONUNBUFFERED=1 \

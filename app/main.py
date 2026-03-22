@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import time
 import uuid
+import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any, Callable
 
@@ -140,7 +142,16 @@ def create_app() -> FastAPI:
     app.include_router(alerts.router, prefix=prefix)
 
     # ── Static Files ──────────────────────────────────────────────────────
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+    # Base directory of the project
+    base_dir = Path(__file__).resolve().parent.parent
+    static_dir = base_dir / "static"
+
+    if not static_dir.exists():
+        logger.warning(f"Static directory not found at {static_dir}")
+        # Create it if it doesn't exist to avoid crash, though it should be there
+        static_dir.mkdir(parents=True, exist_ok=True)
+
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     # ── Health probe ──────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"], summary="Health check")
@@ -161,7 +172,10 @@ def create_app() -> FastAPI:
 
     @app.get("/", tags=["Root"], include_in_schema=False)
     def root():
-        return FileResponse("static/index.html")
+        index_path = static_dir / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        return JSONResponse(content={"message": "SanjeevaniRxAI API is running"})
 
     # ── Global exception handlers ─────────────────────────────────────────
 
