@@ -29,7 +29,7 @@ import os
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, MongoDsn, field_validator
+from pydantic import Field, MongoDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,19 +60,6 @@ class Settings(BaseSettings):
         default="pharmacy_management",
         description="MongoDB database name.",
     )
-
-    @field_validator("MONGO_URI", mode="after")
-    @classmethod
-    def validate_mongo_uri(cls, v: str, info) -> str:
-        """Ensure MONGO_URI is set properly for non-development environments."""
-        # Use info.data to get the ENV field
-        env = info.data.get("ENV", "development")
-        if env == "production" and ("localhost" in v or "127.0.0.1" in v):
-            raise ValueError(
-                f"MONGO_URI cannot be {v} in production! "
-                "Please set a valid MONGODB_URL in your Render environment variables."
-            )
-        return v
 
     # ── API ───────────────────────────────────────────────────────────────────
     API_PREFIX: str = Field(
@@ -220,6 +207,18 @@ class Settings(BaseSettings):
     @classmethod
     def upper_log_level(cls, v: str) -> str:
         return str(v).upper()
+
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        """Ensure deployment-critical settings are valid after all fields load."""
+        if self.ENV == "production" and (
+            "localhost" in self.MONGO_URI or "127.0.0.1" in self.MONGO_URI
+        ):
+            raise ValueError(
+                f"MONGO_URI cannot be {self.MONGO_URI} in production. "
+                "Set a valid MONGO_URI or MONGODB_URL in Render environment variables."
+            )
+        return self
 
     # ──────────────────────────────────────────────────────────────────────────
     # Convenience helpers
