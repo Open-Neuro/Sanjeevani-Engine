@@ -145,7 +145,7 @@ class SafetyValidationService:
         If prescription is required but not provided, return a WARNING
         (not a hard block — pharmacist can override).
         """
-        product = self._get_product(product_id)
+        product = self._get_product(product_id, merchant_id)
         if not product:
             return _warn(
                 "prescription", f"Product '{product_id}' not found in catalogue."
@@ -174,7 +174,7 @@ class SafetyValidationService:
         Return an error if the product is already expired.
         Return a warning if it expires within 30 days.
         """
-        inventory = self._get_inventory(product_id)
+        inventory = self._get_inventory(product_id, merchant_id)
         if not inventory:
             return _ok("expiry", "Expiry not checked — product not in inventory.")
 
@@ -220,7 +220,7 @@ class SafetyValidationService:
         Hard fail if available stock < requested quantity.
         Warning if stock will drop below reorder level after this order.
         """
-        inventory = self._get_inventory(product_id)
+        inventory = self._get_inventory(product_id, merchant_id)
         if not inventory:
             return _warn(
                 "availability", "Product not found in inventory — verify manually."
@@ -302,6 +302,7 @@ class SafetyValidationService:
                 {
                     "$or": [{"Patient ID": patient_id}, {"Patient Name": patient_id}],
                     "Medicine Name": product_id,
+                    "merchant_id": merchant_id,
                 },
                 {"Quantity Ordered": 1, "Quantity": 1},
             )
@@ -348,7 +349,10 @@ class SafetyValidationService:
 
         pending_orders = list(
             db["consumer_orders"].find(
-                {"Order Status": {"$in": ["Pending", "Processing", None]}}
+                {
+                    "Order Status": {"$in": ["Pending", "Processing", None]},
+                    "merchant_id": merchant_id,
+                }
             )
         )
 
@@ -360,7 +364,7 @@ class SafetyValidationService:
             if not pid or not med:
                 continue
 
-            result = self.validate_order(pid, med, qty)
+            result = self.validate_order(pid, med, qty, merchant_id=merchant_id)
             if not result["is_valid"]:
                 alert = {
                     "alert_type": "interaction_warning",
@@ -370,6 +374,7 @@ class SafetyValidationService:
                     "patient_id": pid,
                     "medicine_name": med,
                     "is_resolved": False,
+                    "merchant_id": merchant_id,
                     "auto_actioned": True,
                     "created_at": now,
                     "updated_at": now,
@@ -380,6 +385,7 @@ class SafetyValidationService:
                         "patient_id": pid,
                         "medicine_name": med,
                         "is_resolved": False,
+                        "merchant_id": merchant_id,
                     },
                     {"$set": alert},
                     upsert=True,
@@ -393,13 +399,18 @@ class SafetyValidationService:
     # Private helpers
     # ──────────────────────────────────────────────────────────────────────
 
-    def _get_product(self, product_id: str) -> Optional[Dict[str, Any]]:
+    def _get_product(self, product_id: str, merchant_id: str) -> Optional[Dict[str, Any]]:
         return self.db["products"].find_one(
             {
-                "$or": [
-                    {"Product ID": product_id},
-                    {"Medicine Name": product_id},
-                    {"Generic Name": product_id},
+                "$and": [
+                    {
+                        "$or": [
+                            {"Product ID": product_id},
+                            {"Medicine Name": product_id},
+                            {"Generic Name": product_id},
+                        ]
+                    },
+                    {"merchant_id": merchant_id}
                 ]
             }
         )
