@@ -16,14 +16,12 @@ from pymongo import ASCENDING, DESCENDING
 from app.database.mongo_client import get_db
 from app.modules.inventory_intelligence import InventoryIntelligenceService
 from app.modules.safety_validation import SafetyValidationService
-from app.modules.proactive_outreach import ProactiveOutreachService
 from app.utils.logger import get_logger
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 logger = get_logger(__name__)
 _inv_svc = InventoryIntelligenceService()
 _saf_svc = SafetyValidationService()
-_outreach_svc = ProactiveOutreachService()
 
 
 @router.get("/", summary="List alerts")
@@ -173,19 +171,7 @@ def generate_safety_alerts():
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post(
-    "/run-outreach", summary="Trigger proactive outreach for high-risk refills"
-)
-async def run_outreach():
-    """
-    Search for high-risk refill alerts and send AI-drafted messages via WhatsApp.
-    """
-    try:
-        results = await _outreach_svc.scan_and_reach_out()
-        return results
-    except Exception as exc:
-        logger.error(f"Outreach failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 class ResolveRequest(BaseModel):

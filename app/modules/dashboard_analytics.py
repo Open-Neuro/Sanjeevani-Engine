@@ -26,8 +26,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ── Cache: 128 entries, 5-minute TTL ───────────────────────────────────────
-_CACHE: TTLCache = TTLCache(maxsize=128, ttl=300)
+# ── Cache: 128 entries, 5-second TTL ───────────────────────────────────────
+_CACHE: TTLCache = TTLCache(maxsize=128, ttl=5)
 
 
 def _cache_key(*args, **kwargs) -> str:

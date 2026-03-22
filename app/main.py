@@ -39,15 +39,7 @@ from app.api import (
     orders,
     products,
     recommendations,
-    agents,
-    whatsapp,
-    telegram,
-    voice,
-    sms,
-    web_chat,
-    refill_reminders,
 )
-from app.api.__init__ import router as chatbot_router
 from app.config import settings
 from app.database.mongo_client import close_client, get_client, health_check
 from app.utils.logger import get_logger, setup_logging
@@ -140,29 +132,12 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────────────
     prefix = settings.API_PREFIX
-    app.include_router(dashboard.router, prefix=prefix)
-    app.include_router(dashboard.router, prefix=prefix)
     app.include_router(customers.router, prefix=prefix)
+    app.include_router(dashboard.router, prefix=prefix)
     app.include_router(products.router, prefix=prefix)
     app.include_router(orders.router, prefix=prefix)
     app.include_router(recommendations.router, prefix=prefix)
     app.include_router(alerts.router, prefix=prefix)
-    app.include_router(agents.router, prefix=prefix)
-    app.include_router(
-        whatsapp.router
-    )  # No prefix so /webhook and /api/v1/place-order are mapped exactly as before
-    app.include_router(
-        telegram.router, prefix=prefix
-    )
-    app.include_router(
-        voice.router, prefix=prefix
-    )
-    app.include_router(
-        sms.router, prefix=prefix
-    )
-    app.include_router(web_chat.router, prefix=prefix)
-    app.include_router(refill_reminders.router, prefix=prefix)
-    app.include_router(chatbot_router, prefix=prefix)
 
     # ── Static Files ──────────────────────────────────────────────────────
     app.mount("/static", StaticFiles(directory="static"), name="static")
