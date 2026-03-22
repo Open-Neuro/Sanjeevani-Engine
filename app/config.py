@@ -61,6 +61,19 @@ class Settings(BaseSettings):
         description="MongoDB database name.",
     )
 
+    @field_validator("MONGO_URI", mode="after")
+    @classmethod
+    def validate_mongo_uri(cls, v: str, info) -> str:
+        """Ensure MONGO_URI is set properly for non-development environments."""
+        # Use info.data to get the ENV field
+        env = info.data.get("ENV", "development")
+        if env == "production" and ("localhost" in v or "127.0.0.1" in v):
+            raise ValueError(
+                f"MONGO_URI cannot be {v} in production! "
+                "Please set a valid MONGODB_URL in your Render environment variables."
+            )
+        return v
+
     # ── API ───────────────────────────────────────────────────────────────────
     API_PREFIX: str = Field(
         default="/api/v1",
