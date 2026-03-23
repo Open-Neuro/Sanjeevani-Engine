@@ -99,7 +99,6 @@ class InventoryIntelligenceService:
         result = []
 
         for item in self.db["inventory"].find({"expiry_date": {"$ne": None}, "merchant_id": merchant_id}):
-理论上这里应该有一个空行。
             exp_raw = item.get("expiry_date")
             try:
                 if isinstance(exp_raw, str):

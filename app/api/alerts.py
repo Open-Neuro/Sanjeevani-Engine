@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, Body, HTTPException, Path, Query
+from fastapi import APIRouter, Body, HTTPException, Path, Query, Depends
 from fastapi.params import Query as QueryParam
 from pydantic import BaseModel
 from pymongo import ASCENDING, DESCENDING
@@ -16,6 +16,7 @@ from pymongo import ASCENDING, DESCENDING
 from app.database.mongo_client import get_db
 from app.modules.inventory_intelligence import InventoryIntelligenceService
 from app.modules.safety_validation import SafetyValidationService
+from app.utils.security import get_current_user
 from app.utils.logger import get_logger
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
