@@ -129,15 +129,15 @@ def list_products(
 ):
     """Paginated product catalogue with search + category filter."""
     db = get_db()
-    query: dict = {}
+    query: dict = {"merchant_id": user["merchant_id"]}
     if search:
         query["$or"] = [
-            {"Medicine Name": {"$regex": search, "$options": "i"}},
-            {"Generic Name": {"$regex": search, "$options": "i"}},
-            {"Brand Name": {"$regex": search, "$options": "i"}},
+            {"Medicine Name": {"$regex": f".*{search}.*", "$options": "i"}},
+            {"Generic Name": {"$regex": f".*{search}.*", "$options": "i"}},
+            {"Brand Name": {"$regex": f".*{search}.*", "$options": "i"}},
         ]
     if category:
-        query["Category"] = {"$regex": category, "$options": "i"}
+        query["Category"] = {"$regex": f".*{category}.*", "$options": "i"}
 
     skip = (page - 1) * page_size
     sort_dir = ASCENDING if sort_order == "asc" else DESCENDING
@@ -210,14 +210,16 @@ def low_stock(user: dict = Depends(get_current_user)):
 
     weekly_sales = {}
     for p_name, data in product_sales.items():
-        days = (data["max_dt"] - data["min_dt"]).days
-        weeks = max(days / 7.0, 1.0)
+        days_span = (data["max_dt"] - data["min_dt"]).days
+        weeks = max(days_span / 7.0, 1.0)
         weekly_sales[p_name] = data["total"] / weeks
 
     low_stock_items = []
-    items = list(db["inventory"].find())
+    # Try inventory collection first, then products
+    items = list(db["inventory"].find({"merchant_id": user["merchant_id"]}))
     if not items:
-        items = list(db["products"].find())
+        # Fallback to products if inventory is empty
+        items = list(db["products"].find({"merchant_id": user["merchant_id"]}))
 
     for item in items:
         name = item.get("medicine_name") or item.get("product_name")
@@ -291,9 +293,9 @@ def expiry_risk(days: int = Query(default=90, ge=1, le=365), user: dict = Depend
         weekly_sales[p_name] = data["total"] / weeks
 
     risk_items = []
-    items = list(db["inventory"].find())
+    items = list(db["inventory"].find({"merchant_id": user["merchant_id"]}))
     if not items:
-        items = list(db["products"].find())
+        items = list(db["products"].find({"merchant_id": user["merchant_id"]}))
 
     for item in items:
         name = item.get("medicine_name") or item.get("product_name")
