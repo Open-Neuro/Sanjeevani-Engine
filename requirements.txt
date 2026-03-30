@@ -19,6 +19,7 @@ python-dotenv==1.0.1
 # ── LLM & API Clients (Minimal) ───────────────
 httpx==0.27.0
 requests==2.32.3
+groq
 
 # ── Rate Limiting ─────────────────────────────
 slowapi==0.1.9
