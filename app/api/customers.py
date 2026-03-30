@@ -6,13 +6,15 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pymongo import ASCENDING, DESCENDING
 
 from app.database.mongo_client import get_db
 from app.modules.patient_context import PatientContextService
 from app.modules.recommendation_engine import RecommendationEngine
 from app.utils.logger import get_logger
+from app.utils.security import get_current_user
+from app.utils.helpers import normalize_list
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 logger = get_logger(__name__)
@@ -38,17 +40,16 @@ def list_customers(
     ),
     sort_by: str = Query(default="name"),
     sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+    user: dict = Depends(get_current_user),
 ):
     """Paginated list of patients with optional name/ID search."""
     db = get_db()
-    query: dict = {}
+    query: dict = {"merchant_id": user["merchant_id"]}
     if search:
-        query = {
-            "$or": [
-                {"name": {"$regex": search, "$options": "i"}},
-                {"patient_id": {"$regex": search, "$options": "i"}},
-            ]
-        }
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"patient_id": {"$regex": search, "$options": "i"}},
+        ]
 
     skip = (page - 1) * page_size
     sort_dir = ASCENDING if sort_order == "asc" else DESCENDING
@@ -60,7 +61,7 @@ def list_customers(
         "page_size": page_size,
         "total": total,
         "total_pages": -(-total // page_size),
-        "data": items,
+        "data": normalize_list(items),
     }
 
 

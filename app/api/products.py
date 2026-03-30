@@ -15,10 +15,34 @@ from app.database.mongo_client import get_db
 from app.modules.inventory_intelligence import InventoryIntelligenceService
 from app.utils.logger import get_logger
 from app.utils.security import get_current_user
+from app.utils.helpers import build_pagination_response, normalize_list, normalize_record
 
 router = APIRouter(prefix="/products", tags=["Products"])
 logger = get_logger(__name__)
 _inv = InventoryIntelligenceService()
+
+
+def _resolve_inventory_name(item: dict) -> str:
+    return (
+        item.get("medicine_name")
+        or item.get("product_name")
+        or item.get("Medicine Name")
+        or ""
+    )
+
+
+def _resolve_inventory_stock(item: dict) -> float:
+    raw = item.get("current_stock")
+    if raw is None:
+        raw = item.get("Current Stock")
+    try:
+        return float(raw or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _resolve_inventory_expiry(item: dict):
+    return item.get("expiry_date") or item.get("Expiry Date")
 
 
 class ProductCreate(BaseModel):
@@ -165,7 +189,7 @@ def low_stock(user: dict = Depends(get_current_user)):
     db = get_db()
 
     # Calculate average weekly sales from consumer_orders
-    orders = list(db["consumer_orders"].find())
+    orders = list(db["consumer_orders"].find({"merchant_id": user["merchant_id"]}))
     product_sales = {}
     from datetime import datetime, timedelta, timezone
 
@@ -222,27 +246,29 @@ def low_stock(user: dict = Depends(get_current_user)):
         items = list(db["products"].find({"merchant_id": user["merchant_id"]}))
 
     for item in items:
-        name = item.get("medicine_name") or item.get("product_name")
+        name = _resolve_inventory_name(item)
         if not name:
             continue
 
         avg_weekly = weekly_sales.get(name, 0)
-        stock = float(item.get("current_stock") or 0)
+        stock = _resolve_inventory_stock(item)
 
         if stock < avg_weekly:
             item["urgency"] = "critical" if stock == 0 else "high"
             item["avg_weekly_sales"] = avg_weekly
+            item["medicine_name"] = name
+            item["current_stock"] = stock
             item["_id"] = str(item.get("_id", ""))
             low_stock_items.append(item)
 
-    return {"status": "ok", "data": low_stock_items}
+    return {"status": "ok", "data": normalize_list(low_stock_items)}
 
 
 @router.get("/expiry-risk", summary="Expiry risk items")
 def expiry_risk(days: int = Query(default=90, ge=1, le=365), user: dict = Depends(get_current_user)):
     """Return products that have more stock than can be sold before expiry based on avg weekly sales."""
     db = get_db()
-    orders = list(db["consumer_orders"].find())
+    orders = list(db["consumer_orders"].find({"merchant_id": user["merchant_id"]}))
 
     product_sales = {}
     from datetime import datetime, timedelta, timezone
@@ -298,15 +324,15 @@ def expiry_risk(days: int = Query(default=90, ge=1, le=365), user: dict = Depend
         items = list(db["products"].find({"merchant_id": user["merchant_id"]}))
 
     for item in items:
-        name = item.get("medicine_name") or item.get("product_name")
+        name = _resolve_inventory_name(item)
         if not name:
             continue
 
-        stock = float(item.get("current_stock") or 0)
+        stock = _resolve_inventory_stock(item)
         if stock <= 0:
             continue
 
-        exp_raw = item.get("expiry_date")
+        exp_raw = _resolve_inventory_expiry(item)
         if not exp_raw:
             continue
 
@@ -323,6 +349,8 @@ def expiry_risk(days: int = Query(default=90, ge=1, le=365), user: dict = Depend
             days_left = (exp_dt - now).days
             if days_left <= 0:
                 item["urgency"] = "critical"
+                item["medicine_name"] = name
+                item["current_stock"] = stock
                 item["_id"] = str(item.get("_id", ""))
                 risk_items.append(item)
                 continue
@@ -335,13 +363,15 @@ def expiry_risk(days: int = Query(default=90, ge=1, le=365), user: dict = Depend
                 item["urgency"] = "high"
                 item["projected_sales"] = projected_sales
                 item["days_until_expiry"] = days_left
+                item["medicine_name"] = name
+                item["current_stock"] = stock
                 item["_id"] = str(item.get("_id", ""))
                 risk_items.append(item)
 
         except (ValueError, TypeError):
             continue
 
-    return {"status": "ok", "data": risk_items}
+    return {"status": "ok", "data": normalize_list(risk_items)}
 
 
 @router.get("/reorder-recommendations", summary="Reorder recommendations")
