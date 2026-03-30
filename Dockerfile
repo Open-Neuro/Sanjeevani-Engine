@@ -47,7 +47,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application source
 COPY app/          ./app/
-COPY tests/        ./tests/
 COPY static/       ./static/
 COPY medicines_test_data.csv ./
 
