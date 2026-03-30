@@ -1968,6 +1968,10 @@
                 <i class="fa-solid fa-times modal-close" id="closeModal"></i>
                 <h2>⚙️ Configuration</h2>
                 <div class="input-group">
+                    <label>Pharmacy / Merchant ID (Tenant)</label>
+                    <input type="text" id="pharmacyIdInput" value="samaypowade9@gmail.com" placeholder="PHARM_... or email">
+                </div>
+                <div class="input-group">
                     <label>User Phone Number (Simulated)</label>
                     <input type="text" id="phoneInput" value="+1234567890" placeholder="+1234567890">
                 </div>
@@ -2222,7 +2226,9 @@
         async function loadHistory() {
             try {
                 const phone = phoneInput.value;
-                const response = await fetch(`/api/v1/chat/sessions?phone=${encodeURIComponent(phone)}`);
+                const merchantInput = document.getElementById('pharmacyIdInput');
+                const merchantId = merchantInput ? merchantInput.value : "samaypowade9@gmail.com";
+                const response = await fetch(`/api/v1/chat/sessions?phone=${encodeURIComponent(phone)}&merchant_id=${encodeURIComponent(merchantId)}`);
                 const sessions = await response.json();
 
                 historyContainer.innerHTML = '';
@@ -2255,7 +2261,9 @@
         async function deleteSession(sessionId) {
             if (!confirm('Are you sure you want to delete this chat history?')) return;
             try {
-                const response = await fetch(`/api/v1/chat/sessions/${sessionId}`, {
+                const merchantInput = document.getElementById('pharmacyIdInput');
+                const merchantId = merchantInput ? merchantInput.value : "samaypowade9@gmail.com";
+                const response = await fetch(`/api/v1/chat/sessions/${sessionId}?merchant_id=${encodeURIComponent(merchantId)}`, {
                     method: 'DELETE'
                 });
                 if (response.ok) {
@@ -2276,7 +2284,9 @@
             chatContainer.innerHTML = '';
 
             try {
-                const response = await fetch(`/api/v1/chat/history/${sessionId}`);
+                const merchantInput = document.getElementById('pharmacyIdInput');
+                const merchantId = merchantInput ? merchantInput.value : "samaypowade9@gmail.com";
+                const response = await fetch(`/api/v1/chat/history/${sessionId}?merchant_id=${encodeURIComponent(merchantId)}`);
                 const messages = await response.json();
                 messages.forEach(msg => appendMessage(msg.text, msg.role));
                 loadHistory();
@@ -2467,6 +2477,8 @@
                 formData.append('file', file);
                 formData.append('phone', phoneInput.value);
                 formData.append('session_id', currentSessionId || '');
+                const merchantInput = document.getElementById('pharmacyIdInput');
+                if (merchantInput) formData.append('merchant_id', merchantInput.value);
 
                 // Show typing indicator
                 typingArea.style.display = 'block';
@@ -2614,7 +2626,8 @@
                     body: JSON.stringify({
                         message: text,
                         phone: phone,
-                        session_id: currentSessionId
+                        session_id: currentSessionId,
+                        merchant_id: document.getElementById('pharmacyIdInput') ? document.getElementById('pharmacyIdInput').value : "samaypowade9@gmail.com"
                     })
                 });
 

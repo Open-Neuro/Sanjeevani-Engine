@@ -38,9 +38,9 @@ def generate_session_id():
     return str(uuid.uuid4())
 
 @router.get("/sessions")
-def get_sessions(phone: str = ""):
+def get_sessions(phone: str = "", merchant_id: str = "samaypowade9@gmail.com"):
     db = get_db()
-    query = {}
+    query = {"merchant_id": merchant_id}
     if phone:
         query["phone"] = phone
     
@@ -55,16 +55,18 @@ def get_sessions(phone: str = ""):
     return sessions
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: str):
+def delete_session(session_id: str, merchant_id: str = "samaypowade9@gmail.com"):
     db = get_db()
-    db["chat_sessions"].delete_one({"session_id": session_id})
-    db["chat_history"].delete_many({"session_id": session_id})
+    session = db["chat_sessions"].find_one({"session_id": session_id, "merchant_id": merchant_id})
+    if session:
+        db["chat_sessions"].delete_one({"session_id": session_id})
+        db["chat_history"].delete_many({"session_id": session_id})
     return {"status": "ok"}
 
 @router.get("/history/{session_id}")
-def get_history(session_id: str):
+def get_history(session_id: str, merchant_id: str = "samaypowade9@gmail.com"):
     db = get_db()
-    history = list(db["chat_history"].find({"session_id": session_id}).sort("timestamp", 1))
+    history = list(db["chat_history"].find({"session_id": session_id, "merchant_id": merchant_id}).sort("timestamp", 1))
     for h in history:
         h.pop("_id", None)
     return history
@@ -78,6 +80,7 @@ def process_chat(request: ChatRequest):
         # Initialize session
         db["chat_sessions"].insert_one({
             "session_id": session_id,
+            "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
             "phone": request.phone,
             "title": f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             "created_at": datetime.utcnow(),
@@ -87,6 +90,7 @@ def process_chat(request: ChatRequest):
     # Save user message
     db["chat_history"].insert_one({
         "session_id": session_id,
+        "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
         "role": "user",
         "text": request.message,
         "timestamp": datetime.utcnow()
@@ -102,6 +106,7 @@ def process_chat(request: ChatRequest):
         bot_response = "I am currently running in offline mode because the AI key is not configured. I can still help you browse manually!"
         db["chat_history"].insert_one({
             "session_id": session_id,
+            "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
             "role": "bot",
             "text": bot_response,
             "timestamp": datetime.utcnow()
@@ -155,7 +160,10 @@ Otherwise, just respond normally and be very concise and helpful."""}
                 qty = order_data.get("quantity", 1)
                 
                 # Fetch product to get price
-                product = db["products"].find_one({"Medicine Name": {"$regex": f"^{med_name}$", "$options": "i"}})
+                product = db["products"].find_one({
+                    "Medicine Name": {"$regex": f"^{med_name}$", "$options": "i"},
+                    "merchant_id": request.merchant_id or "samaypowade9@gmail.com"
+                })
                 price = product.get("MRP", 100) if product else 100
                 
                 placed_order_id = f"CHAT-{int(time.time())}"
@@ -190,6 +198,7 @@ Otherwise, just respond normally and be very concise and helpful."""}
     # Save bot response
     db["chat_history"].insert_one({
         "session_id": session_id,
+        "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
         "role": "bot",
         "text": bot_response,
         "timestamp": datetime.utcnow()
@@ -210,6 +219,7 @@ async def upload_prescription(
         session_id = generate_session_id()
         db["chat_sessions"].insert_one({
             "session_id": session_id,
+            "merchant_id": merchant_id or "samaypowade9@gmail.com",
             "phone": phone,
             "title": f"Prescription Upload {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             "created_at": datetime.utcnow(),
@@ -240,6 +250,7 @@ async def upload_prescription(
     # Save bot response
     db["chat_history"].insert_one({
         "session_id": session_id,
+        "merchant_id": merchant_id or "samaypowade9@gmail.com",
         "role": "bot",
         "text": message,
         "timestamp": datetime.utcnow()
