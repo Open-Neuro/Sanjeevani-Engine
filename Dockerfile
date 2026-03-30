@@ -47,11 +47,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application source
 COPY app/          ./app/
-COPY scripts/      ./scripts/
 COPY tests/        ./tests/
 COPY static/       ./static/
-COPY data/         ./data/
-COPY *.json *.csv  ./
+COPY medicines_test_data.csv ./
 
 # Environment defaults (override via docker-compose / Kubernetes env)
 ENV PYTHONUNBUFFERED=1 \
@@ -61,8 +59,8 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=10000 \
     LOG_LEVEL=INFO
 
-# Data directory for mounted Excel files
-RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+# Data and Uploads directory setup
+RUN mkdir -p /app/data /app/uploads && chown -R appuser:appgroup /app/data /app/uploads
 
 USER appuser
 
