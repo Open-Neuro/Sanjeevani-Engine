@@ -67,10 +67,5 @@ USER appuser
 # Expose port (Render ignores this but good for clarity)
 EXPOSE 10000
 
-# Production server: uvicorn (using shell form to expand $PORT)
-CMD uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port ${PORT:-10000} \
-    --workers 2 \
-    --log-level info \
-    --access-log
+# Production server: uvicorn (JSON array format for better signal handling)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000", "--workers", "2", "--log-level", "info", "--access-log"]
