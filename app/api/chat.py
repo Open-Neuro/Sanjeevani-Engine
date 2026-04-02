@@ -198,6 +198,11 @@ Agent Insights for current query: {agent_insights}
 
 Your goal is to guide the user through a safe and easy medicine ordering process, exactly like a WhatsApp pharmacist.
 
+⚠️ STRICT SCOPE CONTROL:
+- You are a specialized Medical & Pharmacy Assistant.
+- **DO NOT** answer questions about politics, general knowledge, sports, celebrities, or anything outside of medicines, health, symptoms, and pharmacy services.
+- If a user asks an off-topic question, politely say: "I apologize, but I am specialized only in medicines and healthcare assistance. How can I help you with your prescription or order today?"
+
 ⚠️ PRIORITY RULE:
 - If the user asks for a medicine or shows an intent to order, **IMMEDIATELY** handle the medicine request (detect medicine, quantity, and check stock/safety).
 - **DO NOT** block the order for Onboarding (Name/Age/Gender) if the user is already asking for a medicine. You can collect their details *after* helping them with the medicine.
@@ -271,26 +276,60 @@ OUTPUT FORMAT: Your response MUST be a single JSON object:
             if master_match: med_name = master_match.get("brand_name", med_name)
             
             placed_order_id = f"RX-{int(time.time())}"
+            merchant_id = request.merchant_id or "samaypowade9@gmail.com"
+            patient_name = temp_data.get("name") or "Guest User"
+            
             new_order = {
                 "Order ID": placed_order_id,
-                "Patient Name": temp_data.get("name") or request.phone or "Guest User",
+                "Patient Name": patient_name,
                 "Medicine Name": med_name,
                 "Quantity": int(qty),
-                "Total Amount": 250 * int(qty), # Mock price
+                "Quantity Ordered": int(qty), # Compatibility with dashboard
+                "Total Amount": float(250 * int(qty)), # Ensure float
                 "Order Status": "Pending",
                 "Order Date": datetime.utcnow(),
-                "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
-                "Order Channel": "Chatbot"
+                "updated_at": datetime.utcnow(),
+                "merchant_id": merchant_id,
+                "Order Channel": "Chatbot",
+                "Gender": temp_data.get("gender"),
+                "Age": int(temp_data.get("age", 0)) if temp_data.get("age") else None,
+                "Payment Method": "Online",
             }
             db["consumer_orders"].insert_one(new_order)
             
+            # --- Sync with Dashboard (Patients & Analytics) ---
+            patient_id = f"PT-{patient_name}".replace(" ", "-").upper()
+            db["patients"].update_one(
+                {"merchant_id": merchant_id, "patient_id": patient_id},
+                {
+                    "$set": {
+                        "name": patient_name,
+                        "merchant_id": merchant_id,
+                        "last_order_id": placed_order_id,
+                        "last_order_date": datetime.utcnow(),
+                        "latest_medicine": med_name,
+                        "last_channel": "Chatbot",
+                        "updated_at": datetime.utcnow(),
+                        "Gender": temp_data.get("gender"),
+                        "Age": int(temp_data.get("age", 0)) if temp_data.get("age") else None,
+                    },
+                    "$setOnInsert": {"created_at": datetime.utcnow()},
+                    "$inc": {"orders_count": 1},
+                },
+                upsert=True,
+            )
+            
             bot_text = (
-                f"✅ *Order Confirmed!*\n\n"
-                f"🆔 **Order ID:** #{placed_order_id}\n"
-                f"👤 **Patient:** {temp_data.get('name', 'User')}\n"
+                f"✅ **Order Confirmed Successfully!**\n\n"
+                f"📦 **Order Details:**\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🆔 **Order ID:** `#{placed_order_id}`\n"
                 f"💊 **Medicine:** {med_name}\n"
-                f"📦 **Status:** Pending Delivery\n\n"
-                f"Our team will process this immediately!"
+                f"🔢 **Quantity:** {qty} Units\n"
+                f"👤 **Patient:** {patient_name}\n"
+                f"🏠 **Status:** Pending Dispatch\n"
+                f"━━━━━━━━━━━━━━━━━━\n\n"
+                f"Our pharmacist has been notified and will prepare your order shortly. Thank you for choosing SanjeevaniRxAI!"
             )
             new_state = ChatState.GREETING
             temp_data = {"name": temp_data.get("name"), "language": temp_data.get("language")} # Keep core info
