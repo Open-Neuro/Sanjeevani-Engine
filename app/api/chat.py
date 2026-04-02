@@ -3,7 +3,8 @@ import time
 import uuid
 import json
 from datetime import datetime
-from typing import Optional, List
+from enum import Enum
+from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
 from pydantic import BaseModel
@@ -13,9 +14,15 @@ import groq
 from app.database.mongo_client import get_db
 from app.config import settings
 from app.utils.logger import get_logger
+from app.modules.safety_validation import SafetyValidationService
+from app.modules.inventory_intelligence import InventoryIntelligenceService
+from app.modules.context_intelligence import ContextIntelligenceService
 
 router = APIRouter(prefix="/chat", tags=["Chatbot"])
 logger = get_logger(__name__)
+safety_svc = SafetyValidationService()
+inventory_svc = InventoryIntelligenceService()
+context_svc = ContextIntelligenceService()
 
 # Initialize Groq client
 if settings.GROQ_API_KEY:
@@ -23,19 +30,51 @@ if settings.GROQ_API_KEY:
 else:
     groq_client = None
 
+class ChatState(str, Enum):
+    ONBOARDING_LANGUAGE = "ONBOARDING_LANGUAGE"
+    ONBOARDING_NAME = "ONBOARDING_NAME"
+    ONBOARDING_GENDER = "ONBOARDING_GENDER"
+    ONBOARDING_AGE = "ONBOARDING_AGE"
+    GREETING = "GREETING"
+    COLLECT_QUANTITY = "COLLECT_QUANTITY"
+    CONFIRM_ORDER = "CONFIRM_ORDER"
+    COLLECT_ADDRESS = "COLLECT_ADDRESS"
+    FINALIZING = "FINALIZING"
+
 class ChatRequest(BaseModel):
     message: str
     phone: Optional[str] = None
     session_id: Optional[str] = None
     merchant_id: Optional[str] = "samaypowade9@gmail.com"
+    button_id: Optional[str] = None # New: if triggered via button
 
 class ChatResponse(BaseModel):
     text: str
     session_id: str
-    buttons: Optional[list] = []
+    state: str # For debugging/UI logic
+    buttons: Optional[List[Dict[str, str]]] = []
+    extracted_data: Optional[Dict[str, Any]] = {}
 
 def generate_session_id():
     return str(uuid.uuid4())
+
+def get_session_state(session_id: str):
+    db = get_db()
+    session = db["chat_sessions"].find_one({"session_id": session_id})
+    if session:
+        return session.get("state", ChatState.ONBOARDING_LANGUAGE), session.get("temp_data", {})
+    return ChatState.ONBOARDING_LANGUAGE, {}
+
+def save_session_state(session_id: str, state: ChatState, temp_data: Dict[str, Any]):
+    db = get_db()
+    db["chat_sessions"].update_one(
+        {"session_id": session_id},
+        {"$set": {
+            "state": state,
+            "temp_data": temp_data,
+            "updated_at": datetime.utcnow()
+        }}
+    )
 
 @router.get("/sessions")
 def get_sessions(phone: str = "", merchant_id: str = "samaypowade9@gmail.com"):
@@ -113,98 +152,169 @@ def process_chat(request: ChatRequest):
         })
         return {"text": bot_response, "session_id": session_id}
 
-    # Fetch history for context
-    history_cursor = db["chat_history"].find({"session_id": session_id}).sort("timestamp", 1).limit(10)
-    messages = [
-        {"role": "system", "content": """You are SanjeevaniRxAI, a helpful pharmacy assistant.
-You can help users find medicines, answer medical queries securely, and place orders.
+    # 3. Pre-process Orchestration (Check agents before AI)
+    current_state, temp_data = get_session_state(session_id)
+    
+    # Try to find medicine in current message to give agents context
+    possible_med = None
+    import re
+    # Use broader candidate selection: any word 3+ chars
+    candidates = re.findall(r'\b[A-Za-z]{3,20}\b', request.message)
+    for word in candidates:
+        # Check against master DB (exact or prefix)
+        match = db["medicine_master"].find_one({"brand_name": {"$regex": f"^{word}", "$options": "i"}})
+        if match:
+            possible_med = match["brand_name"]
+            break
+    
+    # If no word matched, try matching the whole string (for multi-word meds)
+    if not possible_med:
+        match = db["medicine_master"].find_one({"brand_name": {"$regex": f".*{request.message.strip()}.*", "$options": "i"}})
+        if match: possible_med = match["brand_name"]
+    
+    agent_insights = ""
+    if possible_med:
+        # Safety
+        safety = safety_svc.validate_medicine(possible_med)
+        if safety.get("is_habit_forming"):
+            agent_insights += f"\n- SAFETY ALERT: {possible_med} is habit-forming. Prescription REQURED."
+        
+        # Inventory
+        low_stock = inventory_svc.check_low_stock(request.merchant_id or "samaypowade9@gmail.com")
+        if any(i['Medicine Name'].lower() == possible_med.lower() for i in low_stock):
+            agent_insights += f"\n- INVENTORY ALERT: {possible_med} is low in stock."
+            
+        # Context
+        patient_id = request.phone or temp_data.get("name", "Guest")
+        profile = context_svc.get_patient_profile(patient_id)
+        if profile and possible_med in profile.get("active_medicines", []):
+            agent_insights += f"\n- CONTEXT: User has ordered {possible_med} before. This is a potential refill."
 
-If a user explicitly asks to order a medicine, you MUST include a special JSON block at the very end of your response to trigger the ordering system.
-Format:
-```json
-{
-  "PLACE_ORDER": true,
-  "medicine_name": "Name of medicine",
-  "quantity": 1
-}
-```
-Otherwise, just respond normally and be very concise and helpful."""}
-    ]
+    # 4. Prepare Structured AI context
+    STRUCTURED_SYSTEM_PROMPT = f"""You are SanjeevaniRxAI, a professional pharmacy assistant.
+Current User State: {current_state}
+Current Stored Data: {json.dumps(temp_data)}
+Agent Insights for current query: {agent_insights}
+
+Your goal is to guide the user through a safe and easy medicine ordering process, exactly like a WhatsApp pharmacist.
+
+⚠️ PRIORITY RULE:
+- If the user asks for a medicine or shows an intent to order, **IMMEDIATELY** handle the medicine request (detect medicine, quantity, and check stock/safety).
+- **DO NOT** block the order for Onboarding (Name/Age/Gender) if the user is already asking for a medicine. You can collect their details *after* helping them with the medicine.
+
+CRITICAL: CONTEXT RETENTION
+- If 'medicine_name' or 'quantity' are in 'Current Stored Data', do NOT forget them.
+- If Onboarding (Language/Name/Gender/Age) just finished, and a medicine was already mentioned, IMMEDIATELY move to CONFIRM_ORDER or COLLECT_QUANTITY.
+
+STATE-SPECIFIC INSTRUCTIONS:
+- ONBOARDING_LANGUAGE: Ask "Namaste! Please choose your preferred language" with buttons [English, Hindi, Marathi].
+- ONBOARDING_NAME: Ask for their full name.
+- ONBOARDING_GENDER: Ask for gender [Male, Female, Other].
+- ONBOARDING_AGE: Ask for age.
+- GREETING: Professional welcome. Ask how to help with medicines (Only if no medicine is pending).
+- CONFIRM_ORDER: Summarize the order (Med, Qty, Price) and ask to confirm.
+
+AGENT CAPABILITIES:
+- Safety Agent: Checks for habit-forming or prescription needs.
+- Inventory Agent: Checks stock availability & predicts stock-outs.
+- Context Agent: Recognizes if this is a repeat order or refill.
+
+OUTPUT FORMAT: Your response MUST be a single JSON object:
+{{
+  "reply": "Friendly text response to the user",
+  "intent": "GREETING | ORDER_MEDICINE | PROVIDE_INFO | CONFIRM | CANCEL | TRACK_ORDER",
+  "new_state": "The next ChatState based on conversation progress",
+  "buttons": [{{"id": "btn_id", "title": "Button Text"}}],
+  "extracted_data": {{"medicine_name": "...", "quantity": 1, "name": "...", "language": "...", "gender": "...", "age": 0}}
+}}
+"""
+    # Fetch history for context
+    history_cursor = db["chat_history"].find({"session_id": session_id}).sort("timestamp", 1).limit(6)
+    messages = [{"role": "system", "content": STRUCTURED_SYSTEM_PROMPT}]
     
     for h in history_cursor:
         role = "assistant" if h["role"] == "bot" else "user"
         messages.append({"role": role, "content": h["text"]})
+    
+    # Add the current message
+    messages.append({"role": "user", "content": request.message})
         
     try:
         completion = groq_client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=messages,
-            temperature=0.3,
-            max_tokens=500
+            temperature=0.2,
+            response_format={"type": "json_object"}
         )
-        bot_response = completion.choices[0].message.content
+        ai_response = json.loads(completion.choices[0].message.content)
+        bot_text = ai_response.get("reply", "")
+        new_state = ai_response.get("new_state", current_state)
+        buttons = ai_response.get("buttons", [])
+        extracted = ai_response.get("extracted_data", {})
+        
+        # 5. [DEPRECATED HARDCODED AGENTS] - Now moved to System Prompt for better AI flow
+        # Logic is now handled by the LLM using the 'agent_insights' injected above.
+
+        # 6. Update Temp Data
+        if extracted:
+            temp_data.update({k: v for k, v in extracted.items() if v is not None})
+            
+        # 7. Special Case: Order Finalization
+        placed_order_id = None
+        if ai_response.get("intent") == "CONFIRM" and current_state == ChatState.CONFIRM_ORDER:
+            # Place real order
+            med_name = temp_data.get("medicine_name", "Unknown")
+            qty = temp_data.get("quantity", 1)
+            
+            # Final Master check
+            master_match = db["medicine_master"].find_one({"brand_name": {"$regex": f".*{med_name}.*", "$options": "i"}})
+            if master_match: med_name = master_match.get("brand_name", med_name)
+            
+            placed_order_id = f"RX-{int(time.time())}"
+            new_order = {
+                "Order ID": placed_order_id,
+                "Patient Name": temp_data.get("name") or request.phone or "Guest User",
+                "Medicine Name": med_name,
+                "Quantity": int(qty),
+                "Total Amount": 250 * int(qty), # Mock price
+                "Order Status": "Pending",
+                "Order Date": datetime.utcnow(),
+                "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
+                "Order Channel": "Chatbot"
+            }
+            db["consumer_orders"].insert_one(new_order)
+            
+            bot_text = (
+                f"✅ *Order Confirmed!*\n\n"
+                f"🆔 **Order ID:** #{placed_order_id}\n"
+                f"👤 **Patient:** {temp_data.get('name', 'User')}\n"
+                f"💊 **Medicine:** {med_name}\n"
+                f"📦 **Status:** Pending Delivery\n\n"
+                f"Our team will process this immediately!"
+            )
+            new_state = ChatState.GREETING
+            temp_data = {"name": temp_data.get("name"), "language": temp_data.get("language")} # Keep core info
+            buttons = [{"id": "track", "title": "📍 Track Order"}, {"id": "new", "title": "➕ New Order"}]
+
+        # 8. Save Session State
+        save_session_state(session_id, new_state, temp_data)
         
     except Exception as e:
-        logger.error(f"Groq API error: {e}")
-        bot_response = "I'm having trouble connecting to my AI brain right now. Please try again."
-
-    # Process potential orders
-    placed_order_id = None
-    if "```json" in bot_response and "PLACE_ORDER" in bot_response:
-        try:
-            # Extract JSON block
-            json_str = bot_response.split("```json")[1].split("```")[0].strip()
-            order_data = json.loads(json_str)
-            if order_data.get("PLACE_ORDER"):
-                med_name = order_data.get("medicine_name", "Unknown Medicine")
-                qty = order_data.get("quantity", 1)
-                
-                # Fetch product to get price
-                product = db["products"].find_one({
-                    "Medicine Name": {"$regex": f"^{med_name}$", "$options": "i"},
-                    "merchant_id": request.merchant_id or "samaypowade9@gmail.com"
-                })
-                price = product.get("MRP", 100) if product else 100
-                
-                placed_order_id = f"CHAT-{int(time.time())}"
-                new_order = {
-                    "Order ID": placed_order_id,
-                    "Patient Name": request.phone or "Guest User",
-                    "Medicine Name": med_name,
-                    "Quantity": qty,
-                    "Total Amount": price * qty,
-                    "Order Status": "Pending",
-                    "Order Channel": "Chatbot",
-                    "Order Date": datetime.utcnow(),
-                    "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
-                    "Payment Method": "Cash on Delivery",
-                    "Contact Number": request.phone or ""
-                }
-                db["consumer_orders"].insert_one(new_order)
-                logger.info(f"Chatbot placed order: {placed_order_id}")
-                
-            # Clean up response for user
-            bot_response = bot_response.split("```json")[0].strip()
-            
-        except Exception as e:
-            logger.error(f"Failed to parse order from chat: {e}")
-    
-    if placed_order_id:
-        bot_response += f"\n\n✅ Your order #{placed_order_id} has been placed successfully and will appear on our dashboard for processing!"
-        buttons = [{"id": "track", "title": "Track Order"}]
-    else:
+        logger.error(f"Chat Processing Error: {e}")
+        bot_text = "I encountered an error processing your request. Let's try again."
+        new_state = current_state
         buttons = []
 
-    # Save bot response
+    # 8. Save bot response
     db["chat_history"].insert_one({
         "session_id": session_id,
         "merchant_id": request.merchant_id or "samaypowade9@gmail.com",
         "role": "bot",
-        "text": bot_response,
+        "text": bot_text,
         "timestamp": datetime.utcnow()
     })
     
-    return {"text": bot_response, "session_id": session_id, "buttons": buttons}
+    return {"text": bot_text, "session_id": session_id, "state": new_state, "buttons": buttons}
 
 
 @router.post("/upload-prescription")
@@ -226,27 +336,25 @@ async def upload_prescription(
             "updated_at": datetime.utcnow()
         })
         
-    placed_order_id = f"RX-{int(time.time())}"
-    new_order = {
-        "Order ID": placed_order_id,
-        "Patient Name": phone or "Guest User",
-        "Medicine Name": "Prescription Order",
-        "Quantity": 1,
-        "Total Amount": 0,
-        "Order Status": "Pending",
-        "Order Channel": "Chatbot",
-        "Notes": "Uploaded Prescription Image",
-        "Order Date": datetime.utcnow(),
-        "merchant_id": merchant_id or "samaypowade9@gmail.com",
-        "Payment Method": "Pending Verification",
-        "Contact Number": phone or ""
-    }
-    db["consumer_orders"].insert_one(new_order)
+    # Save file temporarily
+    file_path = f"uploads/{file.filename}"
+    os.makedirs("uploads", exist_ok=True)
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+        
+    # Process with Safety Agent
+    result = await safety_svc.process_prescription_file(file_path, groq_client)
     
-    message = (f"✅ **Prescription Uploaded Successfully!**\n\n"
-               f"Order {placed_order_id} has been generated and sent to our pharmacists for review. "
-               f"You can check the dashboard for live status.")
-               
+    if not result.get("success"):
+        message = f"❌ **Verification Failed:** {result.get('error')}"
+    else:
+        meds = result.get("matched_medicines", [])
+        med_list = "\n".join([f"- {m['name']} ({m.get('dosage','')})" for m in meds])
+        message = (f"✅ **Prescription Verified Successfully!**\n\n"
+                   f"**Doctor:** {result.get('doctor', 'Not Found')}\n"
+                   f"**Medicines Extracted:**\n{med_list}\n\n"
+                   f"We have generated a pending order for these items.")
+
     # Save bot response
     db["chat_history"].insert_one({
         "session_id": session_id,
@@ -256,4 +364,4 @@ async def upload_prescription(
         "timestamp": datetime.utcnow()
     })
                
-    return {"message": message, "session_id": session_id}
+    return {"message": message, "session_id": session_id, "data": result}

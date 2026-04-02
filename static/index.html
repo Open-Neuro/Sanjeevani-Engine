@@ -434,6 +434,7 @@
             letter-spacing: -0.5px;
             background: linear-gradient(90deg, var(--text), var(--text-2));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -1790,6 +1791,7 @@
             letter-spacing: -0.5px;
             background: linear-gradient(90deg, #fff, var(--accent));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -1986,7 +1988,50 @@
                 <!-- Messages will be injected here -->
             </main>
 
-            <div id="typingArea" style="display: none;">
+            <div id="tab-lab" class="tab-content" style="display: none;">
+            <div class="online-section-label">Prescription OCR Lab</div>
+            <div class="feature-card" style="margin-bottom: 20px; cursor: pointer;" onclick="document.getElementById('prescriptionInput').click()">
+                <div class="feature-icon">📄</div>
+                <div class="feature-title">Verify Prescription</div>
+                <div class="feature-desc">Upload Image/PDF to test AI extraction & Master DB matching.</div>
+            </div>
+            
+            <div id="ocrStatus" style="display: none;">
+                <div class="ocr-processing">
+                    <i class="fas fa-circle-notch"></i>
+                    <div class="ocr-processing-text">
+                        <div class="ocr-processing-title">AI Processing...</div>
+                        <div class="ocr-processing-desc">Analyzing medical text & doctor details.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="ocrResultArea" style="display: none;">
+                <div class="online-section-label">Extraction Result</div>
+                <div class="ocr-result">
+                    <div id="ocrMedicines" class="ocr-medicines">
+                        <!-- Meds will be injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="online-section-label">Fuzzy Match Test</div>
+            <div class="input-group">
+                <input type="text" id="fuzzyTestInput" placeholder="Try typo: 'paractamol'..." onkeypress="if(event.key==='Enter') testFuzzyMatch()">
+            </div>
+            <div id="fuzzyResult" class="feature-desc" style="padding: 10px; background: var(--bg-2); border-radius: 8px;">
+                Enter a medicine name to test master database matching.
+            </div>
+
+            <div class="online-section-label">Session State Debugger</div>
+            <div id="sessionStateBadge" class="ocr-medicine-badge verified" style="margin-bottom: 10px; display: inline-block;">
+                GREETING
+            </div>
+            <div id="tempDataDisplay" style="font-size: 11px; color: var(--text-3); font-family: monospace; background: var(--bg-3); padding: 8px; border-radius: 6px; overflow-x: auto;">
+                {}
+            </div>
+        </div>
+        <div id="typingArea" style="display: none;">
                 <div style="display:flex; align-items:center; gap:10px;">
                     <div
                         style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#00d97e,#00b368);display:flex;align-items:center;justify-content:center;font-size:14px;color:#000;box-shadow:0 0 14px rgba(0,217,126,0.3);flex-shrink:0;">
@@ -2030,9 +2075,11 @@
         <div class="collab-header">
             <div class="collab-title">Team Workspace</div>
             <div class="collab-tabs">
-                <button class="collab-tab active" onclick="switchCollabTab(this,'team')">Team</button>
-                <button class="collab-tab" onclick="switchCollabTab(this,'notes')">Notes</button>
-                <button class="collab-tab" onclick="switchCollabTab(this,'activity')">Feed</button>
+            <button class="collab-tab active" data-tab="presence">Network</button>
+            <button class="collab-tab" data-tab="notes">Notes</button>
+            <button class="collab-tab" data-tab="lab">Agent Lab</button>
+        </div>
+        <button class="collab-tab" onclick="switchCollabTab(this,'activity')">Feed</button>
             </div>
         </div>
 
@@ -2201,10 +2248,26 @@
         function switchCollabTab(btn, tab) {
             document.querySelectorAll('.collab-tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
+            
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            
             const body = document.getElementById('collabBody');
-            if (tab === 'team') body.innerHTML = renderTeamTab();
-            else if (tab === 'notes') body.innerHTML = renderNotesTab();
-            else body.innerHTML = renderActivityTab();
+            if (tab === 'team' || tab === 'presence') {
+                body.style.display = 'block';
+                body.innerHTML = renderTeamTab();
+            } else if (tab === 'notes') {
+                body.style.display = 'block';
+                body.innerHTML = renderNotesTab();
+            } else if (tab === 'activity') {
+                body.style.display = 'block';
+                body.innerHTML = renderActivityTab();
+            } else if (tab === 'lab') {
+                body.style.display = 'none'; // We have it in main area or sidebar?
+                // Let's show it in the collabBody for consistency if user wants it there
+                body.style.display = 'block';
+                body.innerHTML = document.getElementById('tab-lab').innerHTML;
+            }
         }
 
         // Initialize collab body
@@ -2359,12 +2422,94 @@
             window.speechSynthesis.speak(utterance);
         }
 
+        // --- Agent Lab Logic ---
+        async function testFuzzyMatch() {
+            const input = document.getElementById('fuzzyTestInput').value;
+            const resultDiv = document.getElementById('fuzzyResult');
+            if (!input) return;
+            
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching master database...';
+            
+            try {
+                // We'll use the recommendations/suggest endpoint or a dedicated search one if we had it.
+                // For now, let's just use the chat logic implicitly or call products.
+                const response = await fetch(`/api/v1/products/search?query=${encodeURIComponent(input)}&merchant_id=${encodeURIComponent(document.getElementById('pharmacyIdInput').value)}`);
+                const data = await response.json();
+                
+                if (data.length > 0) {
+                    resultDiv.innerHTML = `✅ Found Match: <strong>${data[0]['Medicine Name']}</strong><br><small>Class: ${data[0]['Therapeutic Class'] || 'General'}</small>`;
+                } else {
+                    resultDiv.innerHTML = `❌ No direct match. The AI will use fuzzy matching during chat.`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `❌ Error: ${e.message}`;
+            }
+        }
+
+        prescriptionInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Show status
+            const statusArea = document.getElementById('ocrStatus');
+            const resultArea = document.getElementById('ocrResultArea');
+            const medList = document.getElementById('ocrMedicines');
+            
+            statusArea.style.display = 'block';
+            resultArea.style.display = 'none';
+            medList.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('phone', phoneInput.value);
+            formData.append('merchant_id', document.getElementById('pharmacyIdInput').value);
+
+            try {
+                const response = await fetch('/api/v1/chat/upload-prescription', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                statusArea.style.display = 'none';
+                resultArea.style.display = 'block';
+                
+                if (result.data && result.data.success) {
+                    const meds = result.data.matched_medicines || [];
+                    if (meds.length === 0) {
+                        medList.innerHTML = '<div class="feature-desc">No medicines detected clearly.</div>';
+                    }
+                    meds.forEach(m => {
+                        const div = document.createElement('div');
+                        div.className = 'ocr-medicine-item';
+                        div.innerHTML = `
+                            <i class="fas fa-pills"></i>
+                            <div class="ocr-medicine-name">${m.name} ${m.dosage || ''}</div>
+                            <span class="ocr-medicine-badge ${m.is_in_database ? 'verified' : 'warning'}">
+                                ${m.is_in_database ? 'Verified' : 'Manual Review'}
+                            </span>
+                        `;
+                        medList.appendChild(div);
+                    });
+                    
+                    // Also append to chat
+                    loadSession(currentSessionId || result.session_id);
+                } else {
+                    medList.innerHTML = `<div class="feature-desc" style="color:#ef4444">${result.message || 'Verification failed.'}</div>`;
+                }
+            } catch (err) {
+                statusArea.style.display = 'none';
+                resultArea.style.display = 'block';
+                medList.innerHTML = `<div class="feature-desc" style="color:#ef4444">Error: ${err.message}</div>`;
+            }
+        });
+
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.lang = 'en-US';
             recognition.interimResults = true;
-
+            
             recognition.onstart = () => {
                 isListening = true;
                 micIcon.style.color = 'var(--accent)';
@@ -2540,7 +2685,7 @@
             const btn = document.createElement('button');
             btn.className = 'action-btn';
             btn.innerHTML = `${btnData.title}`;
-            btn.onclick = () => sendMessage(btnData.title);
+            btn.onclick = () => sendMessage(btnData.title, btnData.id);
             return btn;
         }
 
@@ -2602,7 +2747,7 @@
             }
         }
 
-        async function sendMessage(textOverride = null) {
+        async function sendMessage(textOverride = null, buttonId = null) {
             const text = textOverride || messageInput.value.trim();
             if (!text) return;
             if (isRequestInFlight) return;
@@ -2627,6 +2772,7 @@
                         message: text,
                         phone: phone,
                         session_id: currentSessionId,
+                        button_id: buttonId,
                         merchant_id: document.getElementById('pharmacyIdInput') ? document.getElementById('pharmacyIdInput').value : "samaypowade9@gmail.com"
                     })
                 });
@@ -2650,6 +2796,19 @@
                     ? data.text
                     : "I understood your request, but I could not generate a response. Please try once again.";
                 appendMessage(botText, 'bot', data.buttons || []);
+
+                // Update Debugger
+                if (data.state) {
+                    document.getElementById('sessionStateBadge').textContent = data.state;
+                }
+                
+                // NEW: Update Temp Data Display
+                const tempDataDisplay = document.getElementById('tempDataDisplay');
+                if (tempDataDisplay && data.session_id) {
+                    // We can't get the server's temp_data easily without a GET, 
+                    // but we can estimate or just show the last extracted data
+                    tempDataDisplay.textContent = JSON.stringify(data.extracted_data || {}, null, 2);
+                }
 
                 if (isVoiceAssistantActive) {
                     voiceTranscript.textContent = `"${botText}"`;

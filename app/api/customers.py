@@ -5,6 +5,7 @@ app/api/customers.py  –  /api/v1/customers
 from __future__ import annotations
 
 from typing import List, Optional
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pymongo import ASCENDING, DESCENDING
@@ -122,3 +123,87 @@ def get_customer_recommendations(patient_id: str):
     """Return personalised refill + alternative recommendations."""
     result = _eng.get_personalized_recommendations(patient_id)
     return {"status": "ok", "data": result}
+
+
+@router.get("/live/summary", summary="Live patient summary derived from real orders")
+def get_live_patient_summary(
+    search: Optional[str] = Query(default=None, description="Search by patient name or id"),
+    user: dict = Depends(get_current_user),
+):
+    """
+    Returns a real-time patient list built from the merchant's actual orders.
+    This helps when legacy patients collection is sparse or not synchronized.
+    """
+    db = get_db()
+    merchant_id = user["merchant_id"]
+    query: dict = {"merchant_id": merchant_id}
+    if search:
+        query["$or"] = [
+            {"Patient Name": {"$regex": search, "$options": "i"}},
+            {"Patient ID": {"$regex": search, "$options": "i"}},
+        ]
+
+    orders = list(
+        db["consumer_orders"]
+        .find(query, {"_id": 0})
+        .sort("Order Date", DESCENDING)
+    )
+
+    patients_map: dict[str, dict] = {}
+    for order in orders:
+        patient_name = (
+            order.get("Patient Name")
+            or order.get("patient_name")
+            or "Customer"
+        )
+        patient_id = (
+            order.get("Patient ID")
+            or order.get("patient_id")
+            or f"PT-{patient_name}".replace(" ", "-").upper()
+        )
+        key = f"{patient_id}|{patient_name}".lower()
+
+        entry = patients_map.get(key)
+        if entry is None:
+            entry = {
+                "patient_id": patient_id,
+                "name": patient_name,
+                "orders_count": 0,
+                "last_order_date": order.get("Order Date"),
+                "last_order_id": order.get("Order ID"),
+                "last_channel": order.get("Order Channel"),
+                "latest_medicine": order.get("Medicine Name"),
+                "contact_number": order.get("Contact Number"),
+                "status": "active",
+            }
+            patients_map[key] = entry
+
+        entry["orders_count"] += 1
+        if not entry.get("last_order_date"):
+            entry["last_order_date"] = order.get("Order Date")
+        if not entry.get("latest_medicine"):
+            entry["latest_medicine"] = order.get("Medicine Name")
+        if not entry.get("contact_number"):
+            entry["contact_number"] = order.get("Contact Number")
+
+    patients = list(patients_map.values())
+    patients.sort(
+        key=lambda p: str(p.get("last_order_date") or ""),
+        reverse=True,
+    )
+
+    chronic_like = sum(1 for p in patients if (p.get("orders_count") or 0) >= 3)
+    high_activity = sum(1 for p in patients if (p.get("orders_count") or 0) >= 5)
+
+    return {
+        "status": "ok",
+        "data": {
+            "patients": normalize_list(patients),
+            "summary": {
+                "total_patients": len(patients),
+                "repeat_patients": chronic_like,
+                "high_activity_patients": high_activity,
+                "generated_at": datetime.utcnow().isoformat(),
+            },
+        },
+    }

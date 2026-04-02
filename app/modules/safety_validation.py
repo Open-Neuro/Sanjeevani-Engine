@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.database.mongo_client import get_db
 from app.utils.logger import get_logger
+from app.utils.ocr_service import extract_text_from_image, verify_prescription_with_llm
 
 logger = get_logger(__name__)
 
@@ -141,29 +142,104 @@ class SafetyValidationService:
     ) -> Dict[str, Any]:
         """
         Check whether *product_id* requires a prescription.
-
-        If prescription is required but not provided, return a WARNING
-        (not a hard block — pharmacist can override).
+        NOW: Also checks master medicine database for 'Habit Forming' or 'Prescription' status.
         """
         product = self._get_product(product_id, merchant_id)
-        if not product:
-            return _warn(
-                "prescription", f"Product '{product_id}' not found in catalogue."
-            )
-
-        req_raw = (
-            product.get("Requires Prescription")
-            or product.get("Prescription Required")
-            or ""
-        )
-        requires = str(req_raw).strip().lower() in ("yes", "true", "1", "y")
+        
+        # Check Master Dataset for extra safety
+        master_data = self.db["medicine_master"].find_one({
+            "$or": [{"brand_name": {"$regex": f"^{product_id}$", "$options": "i"}}, {"product_id": product_id}]
+        })
+        
+        requires = False
+        if product:
+            req_raw = product.get("Requires Prescription") or product.get("Prescription Required") or ""
+            requires = str(req_raw).strip().lower() in ("yes", "true", "1", "y")
+        
+        habit_forming = False
+        if master_data:
+            habit_raw = master_data.get("Habit Forming") or ""
+            habit_forming = str(habit_raw).strip().lower() in ("yes", "true", "1", "y")
+            if habit_forming:
+                requires = True # Force prescription for habit forming drugs
 
         if requires and not provided:
-            return _warn(
-                "prescription",
-                f"'{product_id}' requires a prescription — confirm with pharmacist.",
-            )
+            msg = f"'{product_id}' requires a prescription"
+            if habit_forming:
+                msg += " (Warning: Habit Forming medication)"
+            return _warn("prescription", msg + " — confirm with pharmacist.")
+            
         return _ok("prescription", "Prescription check passed.")
+
+    def validate_medicine(self, medicine_name: str) -> Dict[str, Any]:
+        """
+        Quick check for a medicine's safety profile by name.
+        Used by the chatbot for real-time alerts.
+        """
+        db = self.db
+        master_data = db["medicine_master"].find_one({
+            "brand_name": {"$regex": f"^{medicine_name}$", "$options": "i"}
+        })
+        
+        if not master_data:
+            return {"is_habit_forming": False, "requires_prescription": False}
+            
+        habit_raw = master_data.get("Habit Forming") or ""
+        is_habit = str(habit_raw).strip().lower() in ("yes", "true", "1", "y")
+        
+        # Prescription status from master DB
+        type_raw = master_data.get("Type") or ""
+        requires_rx = is_habit or "prescription" in str(type_raw).lower()
+        
+        return {
+            "medicine_name": medicine_name,
+            "is_habit_forming": is_habit,
+            "requires_prescription": requires_rx,
+            "therapeutic_class": master_data.get("Therapeutic Class"),
+            "action_class": master_data.get("Action Class")
+        }
+
+    # ──────────────────────────────────────────────────────────────────────
+    # NEW: process_prescription_file
+    # ──────────────────────────────────────────────────────────────────────
+
+    async def process_prescription_file(self, file_path: str, llm_client) -> Dict[str, Any]:
+        """
+        Process an uploaded prescription: OCR -> LLM Extract -> In-DB Match.
+        """
+        text = extract_text_from_image(file_path)
+        if not text:
+            return {"success": False, "error": "OCR failed to extract text."}
+            
+        # Refine with LLM
+        verification = await verify_prescription_with_llm(text, [], llm_client)
+        
+        if not verification.get("is_valid_prescription"):
+            return {
+                "success": False, 
+                "error": "This does not look like a valid prescription.",
+                "details": verification.get("warnings", [])
+            }
+            
+        # Match medicines against master DB
+        found_medicines = []
+        for med in verification.get("medicines", []):
+            name = med.get("name")
+            master_entry = self.db["medicine_master"].find_one({"brand_name": {"$regex": f"^{name}$", "$options": "i"}})
+            if master_entry:
+                med["is_in_database"] = True
+                med["therapeutic_class"] = master_entry.get("Therapeutic Class")
+                med["habit_forming"] = master_entry.get("Habit Forming")
+            else:
+                med["is_in_database"] = False
+            found_medicines.append(med)
+            
+        return {
+            "success": True,
+            "verification": verification,
+            "matched_medicines": found_medicines,
+            "doctor": verification.get("doctor_name")
+        }
 
     # ──────────────────────────────────────────────────────────────────────
     # 3. check_expiry

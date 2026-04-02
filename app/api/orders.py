@@ -34,6 +34,37 @@ AGENT_BLUEPRINT = [
 ]
 
 
+def _upsert_patient_from_order(db, *, merchant_id: str, order: dict) -> None:
+    patient_name = (order.get("Patient Name") or "Customer").strip() or "Customer"
+    patient_id = (
+        order.get("Patient ID")
+        or f"PT-{patient_name}".replace(" ", "-").upper()
+    )
+    contact = str(order.get("Contact Number") or "").strip()
+    now = datetime.utcnow()
+    db["patients"].update_one(
+        {"merchant_id": merchant_id, "patient_id": patient_id},
+        {
+            "$set": {
+                "name": patient_name,
+                "patient_id": patient_id,
+                "merchant_id": merchant_id,
+                "last_order_id": order.get("Order ID"),
+                "last_order_date": order.get("Order Date"),
+                "latest_medicine": order.get("Medicine Name"),
+                "last_channel": order.get("Order Channel"),
+                "updated_at": now,
+                **({"contact_number": contact} if contact else {}),
+            },
+            "$setOnInsert": {
+                "created_at": now,
+            },
+            "$inc": {"orders_count": 1},
+        },
+        upsert=True,
+    )
+
+
 def _upsert_agent_run(
     db,
     *,
@@ -290,6 +321,7 @@ def confirm_and_dispatch_order(
         {"Order ID": order_id},
         {"$set": {"Order Status": "Completed", "updated_at": datetime.utcnow()}},
     )
+    _upsert_patient_from_order(db, merchant_id=user["merchant_id"], order=order)
 
     # Trigger background tasks for notifications and agent initialization
     patient_name = order.get("Patient Name", "Customer")
@@ -348,6 +380,7 @@ async def place_manual_order(
     }
     
     db.consumer_orders.insert_one(new_order)
+    _upsert_patient_from_order(db, merchant_id=merchant_id, order=new_order)
     
     logger.info(f"📝 Manual Order Created: {order_id} for {body.patient_name}")
     
