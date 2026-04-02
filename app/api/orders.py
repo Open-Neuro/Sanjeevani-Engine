@@ -159,6 +159,7 @@ class QuickOrderRequest(BaseModel):
     medicine_name: str
     quantity: int = 1
     channel: str = "Admin Panel"
+    merchant_id: Optional[str] = None
 
 
 @router.post("/validate", summary="Validate an order before placing")
@@ -315,30 +316,35 @@ async def place_manual_order(
     """
     import time
     db = get_db()
-    merchant_id = user["merchant_id"]
     
-    # 1. Product Verification
+    # Use merchant_id from body if provided, otherwise from logged-in user
+    merchant_id = body.merchant_id or user.get("merchant_id")
+    if not merchant_id:
+        raise HTTPException(status_code=400, detail="Merchant ID is required.")
+    
+    # 1. Product Verification (Lenient for AI orders)
     product = db.products.find_one({
         "Medicine Name": {"$regex": f"^{body.medicine_name}$", "$options": "i"},
         "merchant_id": merchant_id
     })
     
-    if not product:
-        raise HTTPException(status_code=404, detail=f"Medicine '{body.medicine_name}' not found.")
-    
-    # 2. Create Order
+    # 2. Create Order (Allow unmatched products to create a manual order)
     order_id = f"MAN-{int(time.time())}"
+    medicine_name = product["Medicine Name"] if product else body.medicine_name
+    mrp = product.get("MRP", 0) if product else 0
+    
     new_order = {
         "Order ID": order_id,
         "Patient Name": body.patient_name,
-        "Medicine Name": product["Medicine Name"],
+        "Medicine Name": medicine_name,
         "Quantity": body.quantity,
-        "Total Amount": product.get("MRP", 100) * body.quantity,
+        "Total Amount": mrp * body.quantity,
         "Order Status": "Pending",
         "Order Channel": body.channel,
         "Order Date": datetime.utcnow(),
         "merchant_id": merchant_id,
         "Payment Method": "Manual Entry",
+        "is_unmatched": product is None
     }
     
     db.consumer_orders.insert_one(new_order)
