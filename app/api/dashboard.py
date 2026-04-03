@@ -73,3 +73,16 @@ def refresh_cache(user: dict = Depends(get_current_user)):
         return _svc.refresh_dashboard_cache(merchant_id=user["merchant_id"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/ops-status", summary="Operational status for dashboard production telemetry")
+def get_operational_status(user: dict = Depends(get_current_user)):
+    """Return data freshness and agent execution telemetry for the tenant."""
+    try:
+        return {
+            "status": "ok",
+            "data": _svc.get_operational_status(merchant_id=user["merchant_id"]),
+        }
+    except Exception as exc:
+        logger.error("ops status error", extra={"error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc))

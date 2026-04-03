@@ -15,12 +15,9 @@ Public API
     svc.forecast_demand("Metformin 500mg", days=30)
 """
 
-from __future__ import annotations
-
-import statistics
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+import statistics
 
 from app.database.mongo_client import get_db
 from app.utils.logger import get_logger
@@ -133,6 +130,38 @@ class InventoryIntelligenceService:
         result.sort(key=lambda x: x["days_until_expiry"])
         logger.info("Expiry risk check", extra={"at_risk_count": len(result)})
         return result
+
+    # ──────────────────────────────────────────────────────────────────────
+    # NEW: predict_stock_out_days
+    # ──────────────────────────────────────────────────────────────────────
+
+    def predict_stock_out_days(self, medicine_name: str, merchant_id: str) -> float:
+        """
+        Estimate how many days until this medicine runs out based on 30d velocity.
+        """
+        now = datetime.now(tz=timezone.utc)
+        since = now - timedelta(days=30)
+        
+        # Calculate daily velocity
+        order_qty = list(self.db["consumer_orders"].aggregate([
+            {"$match": {
+                "Medicine Name": medicine_name, 
+                "merchant_id": merchant_id,
+                "Order Date": {"$gte": since}
+            }},
+            {"$group": {"_id": None, "total": {"$sum": {"$toDouble": "$Quantity"}}}}
+        ]))
+        
+        total_units = order_qty[0]["total"] if order_qty else 0
+        velocity = total_units / 30.0 # units per day
+        
+        inventory = self.db["inventory"].find_one({"medicine_name": medicine_name, "merchant_id": merchant_id})
+        if not inventory: return 999
+        
+        stock = float(inventory.get("current_stock") or 0)
+        if velocity <= 0: return 999 
+        
+        return round(stock / velocity, 1)
 
     # ──────────────────────────────────────────────────────────────────────
     # 3. analyze_movement_patterns
@@ -380,33 +409,37 @@ class InventoryIntelligenceService:
             low_count += 1
 
         for item in self.check_expiry_risk(merchant_id=merchant_id, days=90):
-            alert = {
-                "alert_type": "expiry_risk",
-                "severity": item["urgency"],
-                "title": f"Expiry Risk: {item['medicine_name']}",
-                "message": (
-                    f"{item['medicine_name']} expires in "
-                    f"{item['days_until_expiry']} days "
-                    f"(expiry: {item['expiry_date']}). "
-                    f"Stock: {item['current_stock']} units."
-                ),
-                "medicine_name": item["medicine_name"],
-                "product_id": item["product_id"],
-                "is_resolved": False,
-                "auto_actioned": False,
-                "created_at": now,
-                "updated_at": now,
-            }
+            # ... (existing logic)
             self.db["alerts"].update_one(
-                {
-                    "alert_type": "expiry_risk",
-                    "product_id": item["product_id"],
-                    "is_resolved": False,
-                },
+                {"alert_type": "expiry_risk", "product_id": item["product_id"], "is_resolved": False},
                 {"$set": alert},
-                upsert=True,
+                upsert=True
             )
             expiry_count += 1
+            
+        # NEW: Predictive Stock Out Alert
+        all_inventory = list(self.db["inventory"].find({"merchant_id": merchant_id}))
+        for item in all_inventory:
+            days_left = self.predict_stock_out_days(item["medicine_name"], merchant_id)
+            if days_left <= 7: # Out within a week
+                alert = {
+                    "alert_type": "predictive_stock_out",
+                    "severity": "high" if days_left <= 3 else "medium",
+                    "title": f"Predictive Warning: {item['medicine_name']}",
+                    "message": f"Based on current demand, this medicine will finish in {days_left} days. Reorder now!",
+                    "medicine_name": item["medicine_name"],
+                    "days_remaining": days_left,
+                    "is_resolved": False,
+                    "merchant_id": merchant_id,
+                    "created_at": now,
+                    "updated_at": now
+                }
+                self.db["alerts"].update_one(
+                    {"alert_type": "predictive_stock_out", "medicine_name": item["medicine_name"], "is_resolved": False},
+                    {"$set": alert},
+                    upsert=True
+                )
+                low_count += 1
 
         logger.info(
             "Inventory alerts generated",

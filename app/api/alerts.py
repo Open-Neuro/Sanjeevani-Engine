@@ -18,6 +18,7 @@ from app.modules.inventory_intelligence import InventoryIntelligenceService
 from app.modules.safety_validation import SafetyValidationService
 from app.utils.security import get_current_user
 from app.utils.logger import get_logger
+from app.utils.helpers import build_pagination_response, normalize_list
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 logger = get_logger(__name__)
@@ -85,26 +86,24 @@ def list_alerts(
         .skip(skip)
         .limit(ps)
     )
-    return {
-        "status": "ok",
-        "page": p,
-        "page_size": ps,
-        "total": total,
-        "total_pages": -(-total // ps),
-        "data": items,
-    }
+    return build_pagination_response(
+        items,
+        total,
+        p,
+        ps
+    )
 
 
 @router.get("/refills", summary="Get refill alerts")
-def get_refill_alerts():
+def get_refill_alerts(user: dict = Depends(get_current_user)):
     """Shortcut for refill_due alerts."""
-    return list_alerts(page=1, page_size=100, alert_type="refill_due")
+    return list_alerts(page=1, page_size=100, alert_type="refill_due", user=user)
 
 
 @router.get("/inventory", summary="Get inventory alerts")
-def get_inventory_alerts():
+def get_inventory_alerts(user: dict = Depends(get_current_user)):
     """Shortcut for low_stock alerts."""
-    return list_alerts(page=1, page_size=100, alert_type="low_stock")
+    return list_alerts(page=1, page_size=100, alert_type="low_stock", user=user)
 
 
 @router.get("/summary", summary="Alert counts by type and severity")

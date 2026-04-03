@@ -23,6 +23,7 @@ from cachetools import TTLCache, cached
 
 from app.database.mongo_client import get_db
 from app.utils.logger import get_logger
+from app.utils.helpers import normalize_list
 
 logger = get_logger(__name__)
 
@@ -179,10 +180,10 @@ class DashboardAnalyticsService:
         chronic_n = self.db["consumer_orders"].count_documents({"Is Chronic": "No", "merchant_id": merchant_id})
 
         result = {
-            "gender_distribution": gender_data,
-            "age_distribution": age_dist,
-            "top_channels": channel_data,
-            "top_diagnoses": diag_data,
+            "gender_distribution": normalize_list(gender_data),
+            "age_distribution": normalize_list(age_dist),
+            "top_channels": normalize_list(channel_data),
+            "top_diagnoses": normalize_list(diag_data),
             "chronic_split": {
                 "chronic": chronic_y,
                 "acute": chronic_n,
@@ -334,15 +335,10 @@ class DashboardAnalyticsService:
         ]
 
         result = {
-            "status_breakdown": [
-                {"status": r["_id"] or "Unknown", "count": r["count"]}
-                for r in status_data
-            ],
-            "payment_methods": [
-                {"method": r["_id"], "count": r["count"]} for r in payment_data
-            ],
+            "status_breakdown": normalize_list(status_data),
+            "payment_methods": normalize_list(payment_data),
             "avg_order_value": round(float(avg_order_value or 0), 2),
-            "daily_orders_30d": daily_data,
+            "daily_orders_30d": normalize_list(daily_data),
         }
         _CACHE[cache_key] = result
         return result
@@ -427,3 +423,102 @@ class DashboardAnalyticsService:
             "cache_size": len(_CACHE),
             "refreshed_at": datetime.now(tz=timezone.utc).isoformat(),
         }
+
+    def get_operational_status(self, merchant_id: str) -> Dict[str, Any]:
+        """
+        Operational telemetry for the production dashboard.
+
+        Includes data freshness, alert volume, and persisted 5-agent activity
+        so the frontend can show whether the system is genuinely running on
+        tenant data.
+        """
+        cache_key = f"{merchant_id}_operational_status"
+        if cache_key in _CACHE:
+            return _CACHE[cache_key]
+
+        now = datetime.now(tz=timezone.utc)
+        collections = {
+            "orders": "consumer_orders",
+            "patients": "patients",
+            "products": "products",
+            "inventory": "inventory",
+            "alerts": "alerts",
+            "predictions": "predictions",
+            "agent_runs": "agent_runs",
+        }
+
+        def latest_timestamp(collection_name: str, candidates: list[str]) -> Optional[datetime]:
+            query = {"merchant_id": merchant_id}
+            projection = {field: 1 for field in candidates}
+            doc = self.db[collection_name].find_one(
+                query,
+                projection=projection,
+                sort=[("_id", -1)],
+            )
+            if not doc:
+                return None
+            for field in candidates:
+                value = doc.get(field)
+                if isinstance(value, datetime):
+                    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+                if isinstance(value, str):
+                    try:
+                        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        continue
+            return None
+
+        collection_status = []
+        for label, collection_name in collections.items():
+            ts = latest_timestamp(collection_name, ["updated_at", "created_at", "Order Date", "order_date", "last_updated"])
+            count = self.db[collection_name].count_documents({"merchant_id": merchant_id})
+            collection_status.append({
+                "name": label,
+                "collection": collection_name,
+                "count": count,
+                "latest_record_at": ts.isoformat() if ts else None,
+                "is_populated": count > 0,
+            })
+
+        latest_runs = list(
+            self.db["agent_runs"]
+            .find({"merchant_id": merchant_id}, {"_id": 0})
+            .sort("updated_at", -1)
+            .limit(5)
+        )
+
+        latest_run = latest_runs[0] if latest_runs else None
+        latest_run_at = latest_run.get("updated_at") if latest_run else None
+        if isinstance(latest_run_at, datetime) and latest_run_at.tzinfo is None:
+            latest_run_at = latest_run_at.replace(tzinfo=timezone.utc)
+
+        alerts_open = self.db["alerts"].count_documents({
+            "merchant_id": merchant_id,
+            "is_resolved": False,
+        })
+        high_risk_predictions = self.db["predictions"].count_documents({
+            "merchant_id": merchant_id,
+            "risk_level": {"$in": ["critical", "high"]},
+            "is_actioned": False,
+        })
+
+        result = {
+            "merchant_id": merchant_id,
+            "generated_at": now.isoformat(),
+            "collections": collection_status,
+            "data_presence": {
+                "has_orders": any(item["name"] == "orders" and item["count"] > 0 for item in collection_status),
+                "has_patients": any(item["name"] == "patients" and item["count"] > 0 for item in collection_status),
+                "has_products": any(item["name"] == "products" and item["count"] > 0 for item in collection_status),
+                "has_inventory": any(item["name"] == "inventory" and item["count"] > 0 for item in collection_status),
+            },
+            "alerts_open": alerts_open,
+            "high_risk_predictions": high_risk_predictions,
+            "latest_agent_run_at": latest_run_at.isoformat() if latest_run_at else None,
+            "latest_agent_run_status": latest_run.get("status") if latest_run else "never_run",
+            "latest_agent_runs": normalize_list(latest_runs),
+            "agent_run_count": self.db["agent_runs"].count_documents({"merchant_id": merchant_id}),
+        }
+        _CACHE[cache_key] = result
+        return result

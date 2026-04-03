@@ -47,11 +47,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application source
 COPY app/          ./app/
-COPY scripts/      ./scripts/
-COPY tests/        ./tests/
 COPY static/       ./static/
-COPY data/         ./data/
-COPY *.json *.csv  ./
+COPY medicines_test_data.csv ./
 
 # Environment defaults (override via docker-compose / Kubernetes env)
 ENV PYTHONUNBUFFERED=1 \
@@ -61,18 +58,13 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=10000 \
     LOG_LEVEL=INFO
 
-# Data directory for mounted Excel files
-RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+# Data and Uploads directory setup
+RUN mkdir -p /app/data /app/uploads && chown -R appuser:appgroup /app/data /app/uploads
 
 USER appuser
 
 # Expose port (Render ignores this but good for clarity)
 EXPOSE 10000
 
-# Production server: uvicorn (using shell form to expand $PORT)
-CMD uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port ${PORT:-10000} \
-    --workers 2 \
-    --log-level info \
-    --access-log
+# Production server: uvicorn (JSON array format for better signal handling)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000", "--workers", "2", "--log-level", "info", "--access-log"]

@@ -37,9 +37,14 @@ async def get_current_user(
     """
     token = credentials.credentials
     user_data = verify_jwt_token(token)
-    
-    # Ensure merchant_id is present for multi-tenancy filtering
-    if "merchant_id" not in user_data:
-        user_data["merchant_id"] = user_data.get("email")
+
+    identity_value = (
+        user_data.get("pharmacy_id")
+        or user_data.get("merchant_id")
+        or user_data.get("email", "unknown")
+    )
+
+    user_data["pharmacy_id"] = identity_value
+    user_data["merchant_id"] = identity_value
         
     return user_data

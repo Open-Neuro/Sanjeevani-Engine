@@ -77,17 +77,18 @@ def _create_client() -> MongoClient:  # type: ignore[type-arg]
         client: MongoClient = MongoClient(  # type: ignore[type-arg]
             settings.MONGO_URI,
             # Timeouts (milliseconds)
-            serverSelectionTimeoutMS=5_000,  # fail fast if no server found
-            connectTimeoutMS=5_000,
-            socketTimeoutMS=30_000,
+            serverSelectionTimeoutMS=10_000,  # Increased for slow networks
+            connectTimeoutMS=10_000,         # Increased for slow networks
+            socketTimeoutMS=45_000,         # Slightly increased
             # Connection pool
             maxPoolSize=50,
             minPoolSize=5,
             maxIdleTimeMS=60_000,
+            heartbeatFrequencyMS=10_000,    # Keep connection alive
             # Reliability
             retryWrites=True,
             retryReads=True,
-            # App identification (shows in MongoDB Atlas performance advisor)
+            # App identification
             appName="SanjeevaniRxAI",
         )
 
