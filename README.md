@@ -5,6 +5,12 @@ Welcome to the **Backend System** of ShivanyaRx AI! This is the "brain" of our p
 It is built completely with **Python** using the super-fast **FastAPI** framework and connects to a **MongoDB** database. 🚀
 
 ---
+## 🌟 Core Features
+* **🧠 AI Refill Predictions:** Analyzes past orders to predict when a patient needs their next refill.
+* **📦 Smart Inventory Management:** Tracks stock levels and alerts on low quantities.
+* **💬 Langfuse Analytics:** Connects patient interactions with AI insights.
+* **🔒 Secure FastAPIs:** Robust endpoints ready to be consumed by the frontend and mobile app.
+
 
 ## ✨ Getting Started for Beginners (Local Setup)
 
