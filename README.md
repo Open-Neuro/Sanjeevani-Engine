@@ -1,10 +1,20 @@
 # 💊 ShivanyaRx AI - Backend System 🧠
 
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white)
+
 Welcome to the **Backend System** of ShivanyaRx AI! This is the "brain" of our pharmacy platform. It handles all the data, powers the AI predictions for medicine refills, manages inventory intelligence, and connects all our apps (Web & Mobile) together. 
 
 It is built completely with **Python** using the super-fast **FastAPI** framework and connects to a **MongoDB** database. 🚀
 
 ---
+## 🌟 Core Features
+* **🧠 AI Refill Predictions:** Analyzes past orders to predict when a patient needs their next refill.
+* **📦 Smart Inventory Management:** Tracks stock levels and alerts on low quantities.
+* **💬 Langfuse Analytics:** Connects patient interactions with AI insights.
+* **🔒 Secure FastAPIs:** Robust endpoints ready to be consumed by the frontend and mobile app.
+
 
 ## ✨ Getting Started for Beginners (Local Setup)
 
@@ -38,8 +48,10 @@ pip install -r requirements.txt
 ### 4️⃣ Configure Settings Environment
 We need to tell the app where the database and secret keys are. 
 1. Copy the `.env.example` file and paste it to create a new file named `.env`.
-2. Open `.env` and make sure the `MONGO_URI` points to your MongoDB.
-3. Add your keys like `GROQ_API_KEY` for AI functionalities.
+2. Open `.env` and configure the following essential variables:
+   * `MONGO_URI`: The connection string to your MongoDB (local or Atlas).
+   * `GROQ_API_KEY`: Your API key for powering the AI features.
+   * `LANGFUSE_PUBLIC_KEY` & `LANGFUSE_SECRET_KEY`: (Optional) Keys for AI analytics if you have them.
 
 ### 5️⃣ Load Sample Data
 Let's populate the database with some testing data (patients, orders, inventory) so the app isn't empty!
@@ -90,6 +102,17 @@ Your API will be running on `http://localhost:8000` just like that! To view the 
   ```bash
   pytest tests/ -v
   ```
+
+---
+
+## 🛠️ Troubleshooting Common Issues
+
+* **Database Connection Error (`pymongo.errors.ServerSelectionTimeoutError`)**: 
+  Ensure your MongoDB instance is running locally or that your `MONGO_URI` in the `.env` file is correct and accessible.
+* **Port In Use (8000)**: 
+  If `uvicorn` fails to start because the port is already taken, you can safely run it on a different port: `uvicorn app.main:app --reload --port 8001`.
+* **AI Features Failing**: 
+  Double-check that your `GROQ_API_KEY` is correctly set in your `.env` file and hasn't expired.
 
 ---
 
