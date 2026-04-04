@@ -62,6 +62,7 @@ services:
       # ── Logging / ENV ─────────────────────────────────────────────────
       LOG_LEVEL: INFO
       ENV: development
+      PORT: 8000
       # ── Security ──────────────────────────────────────────────────────
       SECRET_KEY: ${SECRET_KEY:-dev-secret-change-in-production}
       # ── LLM (Groq) ────────────────────────────────────────────────────

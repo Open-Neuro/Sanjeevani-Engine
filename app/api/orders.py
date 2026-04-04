@@ -9,7 +9,10 @@ import requests as req
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+import csv
+import io
 from fastapi import APIRouter, Body, HTTPException, Query, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING
 
@@ -72,6 +75,58 @@ def list_orders(
         "total_pages": -(-total // page_size),
         "data": items,
     }
+
+
+@router.get("/export/csv", summary="Export orders as CSV")
+def export_orders_csv(user: dict = Depends(get_current_user)):
+    """
+    Export all orders for the current merchant as a CSV file.
+    Includes patient details, medicine info, amounts, and dates.
+    """
+    db = get_db()
+    
+    # 1. Fetch all orders for this merchant, sorted by date (descending)
+    query = {"merchant_id": user["merchant_id"]}
+    orders_cursor = db["consumer_orders"].find(query).sort("Order Date", DESCENDING)
+    
+    # 2. Use io.StringIO to create an in-memory string buffer for the CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # 3. Write CSV Header
+    header = [
+        "Order ID", "Patient Name", "Medicine Name", "Quantity", 
+        "Total Amount", "Order Status", "Order Date", "Order Channel"
+    ]
+    writer.writerow(header)
+    
+    # 4. Write Data Rows
+    for order in orders_cursor:
+        writer.writerow([
+            order.get("Order ID", ""),
+            order.get("Patient Name", ""),
+            order.get("Medicine Name", ""),
+            order.get("Quantity Ordered", order.get("Quantity", "")),
+            order.get("Total Amount", ""),
+            order.get("Order Status", ""),
+            order.get("Order Date", ""),
+            order.get("Order Channel", "")
+        ])
+        
+    # 5. Reset buffer position to start
+    output.seek(0)
+    
+    # 6. Return StreamingResponse with CSV headers
+    # We use a generator to yield the content from the buffer
+    def iter_csv():
+        yield output.getvalue()
+        
+    filename = f"sanjeevani_orders_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    response = StreamingResponse(iter_csv(), media_type="text/csv")
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    
+    return response
 
 
 @router.get("/stats", summary="Order statistics summary")
