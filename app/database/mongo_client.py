@@ -77,8 +77,8 @@ def _create_client() -> MongoClient:  # type: ignore[type-arg]
         client: MongoClient = MongoClient(  # type: ignore[type-arg]
             settings.MONGO_URI,
             # Timeouts (milliseconds)
-            serverSelectionTimeoutMS=5_000,  # fail fast if no server found
-            connectTimeoutMS=5_000,
+            serverSelectionTimeoutMS=15_000,  # increased for flakey DNS
+            connectTimeoutMS=15_000,
             socketTimeoutMS=30_000,
             # Connection pool
             maxPoolSize=50,
@@ -102,7 +102,7 @@ def _create_client() -> MongoClient:  # type: ignore[type-arg]
 
     except ConfigurationError as exc:
         logger.critical(
-            "MongoDB URI is malformed",
+            f"MongoDB URI is malformed: {exc}",
             extra={"error": str(exc)},
         )
         raise

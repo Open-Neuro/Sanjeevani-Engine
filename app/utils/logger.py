@@ -95,6 +95,15 @@ class _PrettyFormatter(logging.Formatter):
             message=record.getMessage(),
         )
 
+        # Append any extras attached to this record
+        extras = {
+            k: v for k, v in record.__dict__.items() if k not in _JSONFormatter._SKIP_FIELDS
+        }
+        if extras:
+            line += f"  {_BOLD}│{_RESET} " + " ".join(
+                f"{_BOLD}{k}={_RESET}{v}" for k, v in extras.items()
+            )
+
         if record.exc_info:
             line += "\n" + self.formatException(record.exc_info)
 

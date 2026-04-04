@@ -396,6 +396,49 @@ class SafetyValidationService:
         return {"alerts_created": count}
 
     # ──────────────────────────────────────────────────────────────────────
+    # 8. match_extracted_medicines
+    # ──────────────────────────────────────────────────────────────────────
+
+    def match_extracted_medicines(
+        self, extracted_items: List[Dict[str, Any]], merchant_id: str
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """
+        Match OCR-extracted medicines against the database.
+        Returns:
+            (matched_medicines, unmatched_medicines)
+        """
+        matched_medicines = []
+        unmatched_medicines = []
+
+        for item in extracted_items:
+            name = item.get("name", "").strip()
+            if not name:
+                continue
+            
+            # Simple case-insensitive search
+            product = self.db["products"].find_one({
+                "merchant_id": merchant_id,
+                "$or": [
+                    {"Medicine Name": {"$regex": f"^{name}$", "$options": "i"}},
+                    {"Generic Name": {"$regex": f"^{name}$", "$options": "i"}},
+                    {"Product ID": {"$regex": f"^{name}$", "$options": "i"}},
+                ]
+            })
+
+            if product:
+                matched_name = product.get("Medicine Name") or name
+                matched_medicines.append({
+                    "name": matched_name,
+                    "dosage": item.get("dosage", ""),
+                    "confidence": item.get("confidence", 0.95),
+                    "in_database": True
+                })
+            else:
+                unmatched_medicines.append(name)
+
+        return matched_medicines, unmatched_medicines
+
+    # ──────────────────────────────────────────────────────────────────────
     # Private helpers
     # ──────────────────────────────────────────────────────────────────────
 
